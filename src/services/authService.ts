@@ -164,3 +164,5 @@ export class AuthService {
     return supabase.auth.onAuthStateChange(callback);
   }
 }
+
+export { AuthService }

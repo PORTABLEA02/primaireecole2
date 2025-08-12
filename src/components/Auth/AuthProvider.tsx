@@ -15,6 +15,7 @@ interface AuthContextType {
   logout: () => void;
   hasPermission: (permission: string) => boolean;
   error: string | null;
+  refreshSession: () => Promise<boolean>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -46,22 +47,25 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
     // Écouter les changements d'authentification
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
+      async (event, session) => {
+        console.log('Auth state change:', event, session?.user?.id);
+        
         if (event === 'SIGNED_IN' && session?.user) {
           // Utiliser setTimeout pour éviter le deadlock
           setTimeout(() => {
             loadUserProfile(session.user);
           }, 0);
         } else if (event === 'SIGNED_OUT') {
-          setUser(null);
-          setSupabaseUser(null);
-          setUserSchool(null);
-          setCurrentAcademicYear(null);
-          setIsAuthenticated(false);
+          handleSignOut();
         } else if (event === 'TOKEN_REFRESHED' && session?.user) {
-          // Pour le rafraîchissement de token, ne pas recharger le profil
-          // car cela peut causer un deadlock
+          // Pour le rafraîchissement de token, mettre à jour l'utilisateur Supabase
           setSupabaseUser(session.user);
+          console.log('Token refreshed successfully');
+        } else if (event === 'TOKEN_REFRESH_FAILED') {
+          // Le refresh token est invalide → obliger l'utilisateur à se reconnecter
+          console.log('Session expirée, merci de vous reconnecter');
+          setError('Votre session a expiré. Veuillez vous reconnecter.');
+          await handleSignOut();
         }
         setLoading(false);
       }
@@ -71,6 +75,43 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       subscription.unsubscribe();
     };
   }, []);
+
+  // Fonction pour rafraîchir manuellement la session
+  const refreshSession = async (): Promise<boolean> => {
+    try {
+      setError(null);
+      const { data, error } = await supabase.auth.refreshSession();
+
+      if (error) {
+        console.error('Erreur lors du refresh de session:', error);
+        setError('Session expirée, merci de vous reconnecter');
+        await handleSignOut();
+        return false;
+      }
+
+      if (data.session?.user) {
+        setSupabaseUser(data.session.user);
+        console.log('Session refreshed manually');
+        return true;
+      }
+
+      return false;
+    } catch (error) {
+      console.error('Erreur lors du refresh manuel:', error);
+      setError('Erreur lors du rafraîchissement de la session');
+      return false;
+    }
+  };
+
+  // Fonction centralisée pour gérer la déconnexion
+  const handleSignOut = () => {
+    setUser(null);
+    setSupabaseUser(null);
+    setUserSchool(null);
+    setCurrentAcademicYear(null);
+    setIsAuthenticated(false);
+    setError(null);
+  };
 
   const checkSession = async () => {
     try {
@@ -267,11 +308,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         setError('Erreur lors de la déconnexion');
       }
 
-      setUser(null);
-      setSupabaseUser(null);
-      setUserSchool(null);
-      setCurrentAcademicYear(null);
-      setIsAuthenticated(false);
+      handleSignOut();
     } catch (error: any) {
       console.error('Erreur lors de la déconnexion:', error);
       setError(error.message || 'Erreur de déconnexion');
@@ -296,7 +333,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     login,
     logout,
     hasPermission,
-    error
+    error,
+    refreshSession
   };
 
   return (

@@ -2,8 +2,10 @@ import React, { useState } from 'react';
 import { AuthProvider, useAuth } from './components/Auth/AuthProvider';
 import { SchoolProvider } from './contexts/SchoolContext';
 import { AcademicYearProvider } from './contexts/AcademicYearContext';
+import { useSessionManager } from './hooks/useSessionManager';
 import LoginPage from './components/Auth/LoginPage';
 import ProtectedRoute from './components/Auth/ProtectedRoute';
+import SessionExpiredModal from './components/Auth/SessionExpiredModal';
 import Sidebar from './components/Layout/Sidebar';
 import Header from './components/Layout/Header';
 import Dashboard from './components/Dashboard/Dashboard';
@@ -17,10 +19,21 @@ import ScheduleManagement from './components/Schedule/ScheduleManagement';
 import EnrollmentInterface from './components/Enrollment/EnrollmentInterface';
 
 const AppContent: React.FC = () => {
-  const { isAuthenticated, login } = useAuth();
+  const { isAuthenticated, login, error, refreshSession, logout } = useAuth();
   const [activeModule, setActiveModule] = useState('dashboard');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+
+  // Utiliser le gestionnaire de session
+  useSessionManager();
+
+  // Vérifier si on doit afficher le modal de session expirée
+  const showSessionExpiredModal = error && (
+    error.includes('session') || 
+    error.includes('expir') || 
+    error.includes('token') ||
+    error.includes('refresh')
+  );
 
   React.useEffect(() => {
     const checkScreenSize = () => {
@@ -109,36 +122,46 @@ const AppContent: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 flex relative">
-      <Sidebar 
-        activeModule={activeModule}
-        onModuleChange={setActiveModule}
-        collapsed={sidebarCollapsed}
-        onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
-        isMobile={isMobile}
-      />
-      
-      {/* Overlay for mobile */}
-      {isMobile && !sidebarCollapsed && (
-        <div 
-          className="fixed inset-0 bg-black bg-opacity-50 z-20 lg:hidden"
-          onClick={() => setSidebarCollapsed(true)}
-        />
-      )}
-      
-      <div className={`flex-1 transition-all duration-300 ${
-        isMobile ? 'ml-0' : sidebarCollapsed ? 'ml-16' : 'ml-64'
-      }`}>
-        <Header 
-          onToggleSidebar={() => setSidebarCollapsed(!sidebarCollapsed)}
+    <>
+      <div className="min-h-screen bg-gray-50 flex relative">
+        <Sidebar 
+          activeModule={activeModule}
+          onModuleChange={setActiveModule}
+          collapsed={sidebarCollapsed}
+          onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
           isMobile={isMobile}
         />
         
-        <main className="p-4 sm:p-6">
-          {renderActiveModule()}
-        </main>
+        {/* Overlay for mobile */}
+        {isMobile && !sidebarCollapsed && (
+          <div 
+            className="fixed inset-0 bg-black bg-opacity-50 z-20 lg:hidden"
+            onClick={() => setSidebarCollapsed(true)}
+          />
+        )}
+        
+        <div className={`flex-1 transition-all duration-300 ${
+          isMobile ? 'ml-0' : sidebarCollapsed ? 'ml-16' : 'ml-64'
+        }`}>
+          <Header 
+            onToggleSidebar={() => setSidebarCollapsed(!sidebarCollapsed)}
+            isMobile={isMobile}
+          />
+          
+          <main className="p-4 sm:p-6">
+            {renderActiveModule()}
+          </main>
+        </div>
       </div>
-    </div>
+
+      {/* Modal de session expirée */}
+      <SessionExpiredModal
+        isOpen={showSessionExpiredModal}
+        onRefresh={refreshSession}
+        onLogout={logout}
+        error={error}
+      />
+    </>
   );
 };
 

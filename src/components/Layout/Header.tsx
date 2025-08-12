@@ -3,6 +3,7 @@ import { Menu, Bell, User, Search } from 'lucide-react';
 import UserMenu from './UserMenu';
 import SchoolSelector from './SchoolSelector';
 import AcademicYearSelector from './AcademicYearSelector';
+import SessionIndicator from './SessionIndicator';
 import { useAuth } from '../Auth/AuthProvider';
 
 interface HeaderProps {
@@ -45,6 +46,10 @@ const Header: React.FC<HeaderProps> = ({ onToggleSidebar, isMobile }) => {
             <AcademicYearSelector />
           </div>
 
+          {/* Session Indicator */}
+          <div className="hidden sm:block">
+            <SessionIndicator />
+          </div>
           {/* Mobile Search Button */}
           <button className="sm:hidden p-2 rounded-lg hover:bg-gray-100 transition-colors">
             <Search className="h-5 w-5 text-gray-600" />
