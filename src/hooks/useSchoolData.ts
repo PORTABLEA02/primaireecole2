@@ -1,151 +1,223 @@
 import { useState, useEffect } from 'react';
-import { useSchool } from '../contexts/SchoolContext';
-import { useAcademicYear } from '../contexts/AcademicYearContext';
-import { Teacher } from '../types/User';
-import { Student } from '../types/User';
-import { ClassInfo } from '../types/Classroom';
+import { SchoolService } from '../services/schoolService';
+import { AcademicYearService } from '../services/academicYearService';
+import { StudentService } from '../services/studentService';
+import { TeacherService } from '../services/teacherService';
+import { ClassService } from '../services/classService';
+import { PaymentService } from '../services/paymentService';
+import { ActivityLogService } from '../services/activityLogService';
 
-export const useSchoolData = () => {
-  const { currentSchool } = useSchool();
-  const { currentAcademicYear } = useAcademicYear();
-  const [teachers, setTeachers] = useState<Teacher[]>([]);
-  const [students, setStudents] = useState<Student[]>([]);
-  const [classes, setClasses] = useState<ClassInfo[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+export const useSchoolData = (schoolId?: string, academicYearId?: string) => {
+  const [students, setStudents] = useState<any[]>([]);
+  const [teachers, setTeachers] = useState<any[]>([]);
+  const [classes, setClasses] = useState<any[]>([]);
+  const [recentPayments, setRecentPayments] = useState<any[]>([]);
+  const [outstandingPayments, setOutstandingPayments] = useState<any[]>([]);
+  const [dashboardStats, setDashboardStats] = useState<any>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (currentSchool && currentAcademicYear) {
-      loadSchoolData(currentSchool.id, currentAcademicYear);
+    if (schoolId && academicYearId) {
+      loadSchoolData();
     }
-  }, [currentSchool, currentAcademicYear]);
+  }, [schoolId, academicYearId]);
 
-  const loadSchoolData = async (schoolId: string, academicYear: string) => {
-    setIsLoading(true);
-    
+  const loadSchoolData = async () => {
+    if (!schoolId || !academicYearId) return;
+
     try {
-      // Charger les données spécifiques à l'école ET à l'année scolaire
-      const dataKey = `${schoolId}_${academicYear}`;
-      const savedTeachers = localStorage.getItem(`teachers_${dataKey}`);
-      const savedStudents = localStorage.getItem(`students_${dataKey}`);
-      const savedClasses = localStorage.getItem(`classes_${dataKey}`);
+      setLoading(true);
+      setError(null);
 
-      if (savedTeachers) {
-        setTeachers(JSON.parse(savedTeachers));
-      } else {
-        // Données par défaut pour la première école
-        if (schoolId === 'ecole-1' && academicYear === '2024-2025') {
-          setTeachers(getDefaultTeachers(schoolId, academicYear));
-        } else {
-          setTeachers([]);
-        }
-      }
+      // Charger toutes les données en parallèle
+      const [
+        studentsData,
+        teachersData,
+        classesData,
+        recentPaymentsData,
+        outstandingData,
+        statsData
+      ] = await Promise.all([
+        StudentService.getStudents(schoolId, academicYearId),
+        TeacherService.getTeachers(schoolId),
+        ClassService.getClasses(schoolId, academicYearId),
+        PaymentService.getRecentPayments(schoolId, 10),
+        PaymentService.getOutstandingPayments(schoolId, academicYearId),
+        SchoolService.getSchoolStats(schoolId, academicYearId)
+      ]);
 
-      if (savedStudents) {
-        setStudents(JSON.parse(savedStudents));
-      } else {
-        setStudents([]);
-      }
+      setStudents(studentsData);
+      setTeachers(teachersData);
+      setClasses(classesData);
+      setRecentPayments(recentPaymentsData);
+      setOutstandingPayments(outstandingData);
+      setDashboardStats(statsData);
 
-      if (savedClasses) {
-        setClasses(JSON.parse(savedClasses));
-      } else {
-        if (schoolId === 'ecole-1' && academicYear === '2024-2025') {
-          setClasses(getDefaultClasses(schoolId, academicYear));
-        } else {
-          setClasses([]);
-        }
-      }
-    } catch (error) {
-      console.error('Erreur lors du chargement des données de l\'école:', error);
+    } catch (error: any) {
+      console.error('Erreur lors du chargement des données:', error);
+      setError(error.message || 'Erreur lors du chargement des données');
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
   };
 
-  const saveTeachers = (newTeachers: Teacher[]) => {
-    if (currentSchool && currentAcademicYear) {
-      setTeachers(newTeachers);
-      const dataKey = `${currentSchool.id}_${currentAcademicYear}`;
-      localStorage.setItem(`teachers_${dataKey}`, JSON.stringify(newTeachers));
+  const refreshData = async () => {
+    await loadSchoolData();
+  };
+
+  const logActivity = async (
+    action: string,
+    entityType: string,
+    entityId?: string,
+    details?: string,
+    level: 'info' | 'warning' | 'error' | 'success' = 'info'
+  ) => {
+    if (schoolId) {
+      await ActivityLogService.logActivity({
+        schoolId,
+        action,
+        entityType,
+        entityId,
+        level,
+        details
+      });
     }
   };
 
-  const saveStudents = (newStudents: Student[]) => {
-    if (currentSchool && currentAcademicYear) {
-      setStudents(newStudents);
-      const dataKey = `${currentSchool.id}_${currentAcademicYear}`;
-      localStorage.setItem(`students_${dataKey}`, JSON.stringify(newStudents));
+  // Fonctions spécialisées pour chaque entité
+  const createStudent = async (studentData: any, enrollmentData: any) => {
+    try {
+      const result = await StudentService.createStudentWithEnrollment(
+        { ...studentData, schoolId },
+        { ...enrollmentData, academicYearId }
+      );
+
+      await logActivity(
+        'CREATE_STUDENT',
+        'student',
+        result.student.id,
+        `Nouvel élève: ${studentData.firstName} ${studentData.lastName}`,
+        'success'
+      );
+
+      await refreshData();
+      return result;
+    } catch (error) {
+      await logActivity(
+        'CREATE_STUDENT_ERROR',
+        'student',
+        undefined,
+        `Erreur création élève: ${error}`,
+        'error'
+      );
+      throw error;
     }
   };
 
-  const saveClasses = (newClasses: ClassInfo[]) => {
-    if (currentSchool && currentAcademicYear) {
-      setClasses(newClasses);
-      const dataKey = `${currentSchool.id}_${currentAcademicYear}`;
-      localStorage.setItem(`classes_${dataKey}`, JSON.stringify(newClasses));
+  const createTeacher = async (teacherData: any) => {
+    try {
+      const teacher = await TeacherService.createTeacher({
+        ...teacherData,
+        schoolId
+      });
+
+      await logActivity(
+        'CREATE_TEACHER',
+        'teacher',
+        teacher.id,
+        `Nouvel enseignant: ${teacherData.firstName} ${teacherData.lastName}`,
+        'success'
+      );
+
+      await refreshData();
+      return teacher;
+    } catch (error) {
+      await logActivity(
+        'CREATE_TEACHER_ERROR',
+        'teacher',
+        undefined,
+        `Erreur création enseignant: ${error}`,
+        'error'
+      );
+      throw error;
+    }
+  };
+
+  const createClass = async (classData: any) => {
+    try {
+      const classItem = await ClassService.createClass({
+        ...classData,
+        schoolId,
+        academicYearId
+      });
+
+      await logActivity(
+        'CREATE_CLASS',
+        'class',
+        classItem.id,
+        `Nouvelle classe: ${classData.name}`,
+        'success'
+      );
+
+      await refreshData();
+      return classItem;
+    } catch (error) {
+      await logActivity(
+        'CREATE_CLASS_ERROR',
+        'class',
+        undefined,
+        `Erreur création classe: ${error}`,
+        'error'
+      );
+      throw error;
+    }
+  };
+
+  const recordPayment = async (paymentData: any) => {
+    try {
+      const payment = await PaymentService.recordPayment({
+        ...paymentData,
+        schoolId,
+        academicYearId
+      });
+
+      await logActivity(
+        'RECORD_PAYMENT',
+        'payment',
+        payment.id,
+        `Paiement: ${paymentData.amount} FCFA`,
+        'success'
+      );
+
+      await refreshData();
+      return payment;
+    } catch (error) {
+      await logActivity(
+        'RECORD_PAYMENT_ERROR',
+        'payment',
+        undefined,
+        `Erreur paiement: ${error}`,
+        'error'
+      );
+      throw error;
     }
   };
 
   return {
-    teachers,
     students,
+    teachers,
     classes,
-    isLoading,
-    saveTeachers,
-    saveStudents,
-    saveClasses,
-    currentSchool,
-    currentAcademicYear
+    recentPayments,
+    outstandingPayments,
+    dashboardStats,
+    loading,
+    error,
+    refreshData,
+    logActivity,
+    createStudent,
+    createTeacher,
+    createClass,
+    recordPayment
   };
 };
-
-// Données par défaut pour la première école
-const getDefaultTeachers = (schoolId: string, academicYear: string): Teacher[] => [
-  {
-    id: '1',
-    firstName: 'Moussa',
-    lastName: 'Traore',
-    email: 'mtraore@ecoletech.edu',
-    phone: '+223 70 11 22 33',
-    subjects: ['Français', 'Mathématiques', 'Éveil Scientifique', 'Éducation Civique'],
-    assignedClass: 'CI A',
-    status: 'Actif',
-    experience: '8 ans',
-    qualification: 'Licence en Pédagogie',
-    hireDate: '2016-09-01',
-    salary: 180000,
-    address: 'Quartier Hippodrome, Bamako',
-    emergencyContact: '+223 65 44 33 22',
-    specializations: ['Mathématiques', 'Sciences'],
-    performanceRating: 4.5,
-    schoolId,
-    academicYear
-  }
-];
-
-const getDefaultClasses = (schoolId: string, academicYear: string): ClassInfo[] => [
-  {
-    id: '1',
-    name: 'Maternelle 1A',
-    level: 'Maternelle',
-    students: 25,
-    capacity: 30,
-    teacher: 'Mme Kone',
-    teacherId: 'kone',
-    subjects: ['Éveil', 'Langage', 'Graphisme', 'Jeux éducatifs'],
-    schoolId,
-    academicYear
-  },
-  {
-    id: '2',
-    name: 'CI A',
-    level: 'CI',
-    students: 32,
-    capacity: 35,
-    teacher: 'M. Traore',
-    teacherId: 'traore',
-    subjects: ['Français', 'Mathématiques', 'Éveil Scientifique', 'Éducation Civique'],
-    schoolId,
-    academicYear
-  }
-];
