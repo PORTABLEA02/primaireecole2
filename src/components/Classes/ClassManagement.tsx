@@ -1,124 +1,132 @@
-import React from 'react';
-import { Plus, Users, Calendar, Settings } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Plus, Users, Calendar, Settings, RefreshCw, AlertCircle } from 'lucide-react';
 import AddClassModal from './AddClassModal';
 import TeacherAssignmentModal from './TeacherAssignmentModal';
 import ClassDetailModal from './ClassDetailModal';
 import ClassScheduleModal from './ClassScheduleModal';
 import ChangeTeacherModal from './ChangeTeacherModal';
-import { useAcademicYear } from '../../contexts/AcademicYearContext';
+import { useAuth } from '../Auth/AuthProvider';
+import { ClassService } from '../../services/classService';
+import { TeacherService } from '../../services/teacherService';
+import { ActivityLogService } from '../../services/activityLogService';
+
+interface ClassData {
+  id: string;
+  name: string;
+  level: string;
+  capacity: number;
+  current_students: number;
+  subjects: string[];
+  teacher_assignment?: {
+    teacher: {
+      first_name: string;
+      last_name: string;
+      email: string;
+    };
+    salary_amount: number;
+  };
+  classroom_assignment?: {
+    classroom: {
+      name: string;
+      capacity: number;
+    };
+  };
+}
+
+interface TeacherAssignment {
+  id: string;
+  teacher_id: string;
+  first_name: string;
+  last_name: string;
+  email: string;
+  class_id: string;
+  class_name: string;
+  level: string;
+  salary_amount: number;
+  is_active: boolean;
+}
 
 const ClassManagement: React.FC = () => {
-  const [showAddModal, setShowAddModal] = React.useState(false);
-  const [showAssignmentModal, setShowAssignmentModal] = React.useState(false);
-  const [showDetailModal, setShowDetailModal] = React.useState(false);
-  const [showScheduleModal, setShowScheduleModal] = React.useState(false);
-  const [showChangeTeacherModal, setShowChangeTeacherModal] = React.useState(false);
-  const [selectedClass, setSelectedClass] = React.useState<any>(null);
-  const { currentAcademicYear } = useAcademicYear();
-  const [classes, setClasses] = React.useState([
-    { 
-      id: '1',
-      name: 'Maternelle 1A', 
-      level: 'Maternelle', 
-      students: 25, 
-      capacity: 30, 
-      teacher: 'Mme Kone',
-      teacherId: 'kone',
-      subjects: ['Éveil', 'Langage', 'Graphisme', 'Jeux éducatifs']
-    },
-    { 
-      id: '2',
-      name: 'Maternelle 1B', 
-      level: 'Maternelle', 
-      students: 28, 
-      capacity: 30, 
-      teacher: 'Mme Diallo',
-      teacherId: 'diallo',
-      subjects: ['Éveil', 'Langage', 'Graphisme', 'Jeux éducatifs']
-    },
-    { 
-      id: '3',
-      name: 'CI A', 
-      level: 'CI', 
-      students: 32, 
-      capacity: 35, 
-      teacher: 'M. Traore',
-      teacherId: 'traore',
-      subjects: ['Français', 'Mathématiques', 'Éveil Scientifique', 'Éducation Civique']
-    },
-    { 
-      id: '4',
-      name: 'CP1', 
-      level: 'CP', 
-      students: 30, 
-      capacity: 35, 
-      teacher: 'Mlle Coulibaly',
-      teacherId: 'coulibaly',
-      subjects: ['Français', 'Mathématiques', 'Éveil Scientifique', 'Éducation Civique', 'Dessin']
-    },
-    { 
-      id: '5',
-      name: 'CP2', 
-      level: 'CP', 
-      students: 29, 
-      capacity: 35, 
-      teacher: 'M. Sangare',
-      teacherId: 'sangare',
-      subjects: ['Français', 'Mathématiques', 'Éveil Scientifique', 'Éducation Civique', 'Dessin']
-    },
-    { 
-      id: '6',
-      name: 'CE1A', 
-      level: 'CE1', 
-      students: 35, 
-      capacity: 40, 
-      teacher: 'Mme Toure',
-      teacherId: 'toure',
-      subjects: ['Français', 'Mathématiques', 'Histoire-Géographie', 'Sciences', 'Éducation Civique']
-    },
-    { 
-      id: '7',
-      name: 'CE2B', 
-      level: 'CE2', 
-      students: 38, 
-      capacity: 40, 
-      teacher: 'M. Sidibe',
-      teacherId: 'sidibe',
-      subjects: ['Français', 'Mathématiques', 'Histoire-Géographie', 'Sciences', 'Éducation Civique']
-    },
-    { 
-      id: '8',
-      name: 'CM2A', 
-      level: 'CM2', 
-      students: 42, 
-      capacity: 45, 
-      teacher: 'M. Ouattara',
-      teacherId: 'ouattara',
-      subjects: ['Français', 'Mathématiques', 'Histoire-Géographie', 'Sciences', 'Éducation Civique', 'Anglais']
-    }
-  ]);
+  const { userSchool, currentAcademicYear } = useAuth();
+  const [classes, setClasses] = useState<ClassData[]>([]);
+  const [teacherAssignments, setTeacherAssignments] = useState<TeacherAssignment[]>([]);
+  const [availableTeachers, setAvailableTeachers] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  
+  // Modals state
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [showAssignmentModal, setShowAssignmentModal] = useState(false);
+  const [showDetailModal, setShowDetailModal] = useState(false);
+  const [showScheduleModal, setShowScheduleModal] = useState(false);
+  const [showChangeTeacherModal, setShowChangeTeacherModal] = useState(false);
+  const [selectedClass, setSelectedClass] = useState<ClassData | null>(null);
 
-  // Liste des enseignants disponibles (ceux qui n'ont pas encore de classe assignée)
-  const availableTeachers = [
-    { id: 'new-teacher-1', name: 'M. Bakary Diarra', isAvailable: true },
-    { id: 'new-teacher-2', name: 'Mme Salimata Keita', isAvailable: true },
-    { id: 'new-teacher-3', name: 'M. Abdoulaye Cisse', isAvailable: true },
-    { id: 'kone', name: 'Mme Kone', isAvailable: false },
-    { id: 'traore', name: 'M. Traore', isAvailable: false },
-    { id: 'coulibaly', name: 'Mlle Coulibaly', isAvailable: false }
-  ];
-  const levels = [
-    { name: 'Maternelle', classes: 4, students: 106, color: 'purple' },
-    { name: 'CI', classes: 2, students: 64, color: 'blue' },
-    { name: 'CP', classes: 4, students: 118, color: 'green' },
-    { name: 'CE1', classes: 3, students: 105, color: 'yellow' },
-    { name: 'CE2', classes: 3, students: 114, color: 'orange' },
-    { name: 'CM1', classes: 3, students: 126, color: 'red' },
-    { name: 'CM2', classes: 2, students: 84, color: 'indigo' }
-  ];
+  // Charger les données au montage du composant
+  useEffect(() => {
+    if (userSchool && currentAcademicYear) {
+      loadData();
+    }
+  }, [userSchool, currentAcademicYear]);
+
+  const loadData = async () => {
+    if (!userSchool || !currentAcademicYear) return;
+
+    try {
+      setLoading(true);
+      setError(null);
+
+      const [classesData, assignmentsData, teachersData] = await Promise.all([
+        ClassService.getClasses(userSchool.id, currentAcademicYear.id),
+        TeacherService.getTeacherAssignments(userSchool.id, currentAcademicYear.id),
+        TeacherService.getAvailableTeachers(userSchool.id, currentAcademicYear.id)
+      ]);
+
+      setClasses(classesData);
+      setTeacherAssignments(assignmentsData);
+      setAvailableTeachers(teachersData);
+
+    } catch (error: any) {
+      console.error('Erreur lors du chargement des données:', error);
+      setError(error.message || 'Erreur lors du chargement des données');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Calculer les statistiques par niveau
+  const levelStats = React.useMemo(() => {
+    const stats: Record<string, { classes: number; students: number; color: string }> = {};
+    
+    classes.forEach(cls => {
+      if (!stats[cls.level]) {
+        stats[cls.level] = { classes: 0, students: 0, color: getLevelColor(cls.level) };
+      }
+      stats[cls.level].classes += 1;
+      stats[cls.level].students += cls.current_students;
+    });
+
+    return Object.entries(stats).map(([level, data]) => ({
+      name: level,
+      ...data
+    }));
+  }, [classes]);
+
+  const getLevelColor = (level: string) => {
+    const colors: Record<string, string> = {
+      'Maternelle': 'purple',
+      'CI': 'blue',
+      'CP': 'green',
+      'CE1': 'yellow',
+      'CE2': 'orange',
+      'CM1': 'red',
+      'CM2': 'indigo'
+    };
+    return colors[level] || 'blue';
+  };
 
   const getColorClasses = (color: string) => {
-    const colorMap = {
+    const colorMap: Record<string, string> = {
       purple: 'bg-purple-50 text-purple-700',
       blue: 'bg-blue-50 text-blue-700',
       green: 'bg-green-50 text-green-700',
@@ -127,71 +135,170 @@ const ClassManagement: React.FC = () => {
       red: 'bg-red-50 text-red-700',
       indigo: 'bg-indigo-50 text-indigo-700'
     };
-    return colorMap[color as keyof typeof colorMap] || colorMap.blue;
+    return colorMap[color] || colorMap.blue;
   };
 
-  const handleAddClass = (classData: any) => {
-    const newClass = {
-      id: (classes.length + 1).toString(),
-      name: classData.name,
-      level: classData.level,
-      students: 0, // Nouvelle classe commence avec 0 élèves
-      capacity: classData.capacity,
-      teacher: classData.teacherName,
-      teacherId: classData.teacherId,
-      subjects: classData.subjects,
-      classroom: classData.classroom,
-      academicYear: currentAcademicYear
-    };
-    
-    setClasses(prev => [...prev, newClass]);
-    
-    // Afficher une notification de succès (optionnel)
-    console.log('Nouvelle classe créée:', newClass);
+  const handleAddClass = async (classData: any) => {
+    if (!userSchool || !currentAcademicYear) return;
+
+    try {
+      await ClassService.createClass({
+        schoolId: userSchool.id,
+        academicYearId: currentAcademicYear.id,
+        name: classData.name,
+        level: classData.level,
+        capacity: classData.capacity,
+        subjects: classData.subjects
+      });
+
+      // Si un enseignant est assigné, créer l'affectation
+      if (classData.teacherId) {
+        const newClass = await ClassService.getClasses(userSchool.id, currentAcademicYear.id);
+        const createdClass = newClass.find(c => c.name === classData.name);
+        
+        if (createdClass) {
+          await TeacherService.assignTeacherToClass({
+            teacherId: classData.teacherId,
+            classId: createdClass.id,
+            schoolId: userSchool.id,
+            academicYearId: currentAcademicYear.id,
+            salaryAmount: classData.salary || 150000
+          });
+        }
+      }
+
+      await ActivityLogService.logActivity({
+        schoolId: userSchool.id,
+        action: 'CREATE_CLASS',
+        entityType: 'class',
+        level: 'success',
+        details: `Nouvelle classe créée: ${classData.name}`
+      });
+
+      await loadData();
+      alert('Classe créée avec succès !');
+    } catch (error: any) {
+      console.error('Erreur lors de la création:', error);
+      alert(`Erreur: ${error.message}`);
+    }
   };
 
-  const handleTeacherAssignment = (assignments: any[]) => {
-    // Ici vous pouvez implémenter la logique de sauvegarde des affectations
-    console.log('Affectations d\'enseignants:', assignments);
-    
-    // Simulation de mise à jour des classes
-    assignments.forEach(assignment => {
-      console.log(`${assignment.teacherName} assigné à ${assignment.className}`);
-    });
-    
-    // Notification de succès
-    alert(`${assignments.length} affectation(s) enregistrée(s) avec succès !`);
+  const handleTeacherAssignment = async (assignments: any[]) => {
+    if (!userSchool || !currentAcademicYear) return;
+
+    try {
+      for (const assignment of assignments) {
+        await TeacherService.assignTeacherToClass({
+          teacherId: assignment.teacherId,
+          classId: assignment.classId,
+          schoolId: userSchool.id,
+          academicYearId: currentAcademicYear.id,
+          salaryAmount: assignment.salary || 150000
+        });
+      }
+
+      await ActivityLogService.logActivity({
+        schoolId: userSchool.id,
+        action: 'ASSIGN_TEACHERS',
+        entityType: 'teacher_assignment',
+        level: 'success',
+        details: `${assignments.length} affectation(s) d'enseignants créée(s)`
+      });
+
+      await loadData();
+      alert(`${assignments.length} affectation(s) enregistrée(s) avec succès !`);
+    } catch (error: any) {
+      console.error('Erreur lors des affectations:', error);
+      alert(`Erreur: ${error.message}`);
+    }
   };
 
-  const handleManageClass = (classItem: any) => {
+  const handleManageClass = (classItem: ClassData) => {
     setSelectedClass(classItem);
     setShowDetailModal(true);
   };
 
-  const handleViewSchedule = (classItem: any) => {
+  const handleViewSchedule = (classItem: ClassData) => {
     setSelectedClass(classItem);
     setShowScheduleModal(true);
   };
 
-  const handleChangeTeacher = (classItem: any) => {
+  const handleChangeTeacher = (classItem: ClassData) => {
     setSelectedClass(classItem);
     setShowChangeTeacherModal(true);
   };
 
-  const handleUpdateClass = (updatedClass: any) => {
-    setClasses(prev => prev.map(c => c.id === updatedClass.id ? updatedClass : c));
+  const handleUpdateClass = async (updatedClass: any) => {
+    try {
+      await ClassService.updateClass(updatedClass.id, {
+        name: updatedClass.name,
+        capacity: updatedClass.capacity,
+        subjects: updatedClass.subjects
+      });
+
+      await loadData();
+      alert('Classe mise à jour avec succès !');
+    } catch (error: any) {
+      console.error('Erreur lors de la mise à jour:', error);
+      alert(`Erreur: ${error.message}`);
+    }
   };
 
-  const handleTeacherChange = (classId: string, newTeacherId: string, newTeacherName: string) => {
-    setClasses(prev => prev.map(c => 
-      c.id === classId 
-        ? { ...c, teacherId: newTeacherId, teacher: newTeacherName }
-        : c
-    ));
-    
-    // Notification de succès
-    alert(`Enseignant changé avec succès pour ${selectedClass?.name} !`);
+  const handleTeacherChange = async (classId: string, newTeacherId: string, newTeacherName: string) => {
+    if (!userSchool || !currentAcademicYear) return;
+
+    try {
+      await TeacherService.changeTeacherAssignment(
+        newTeacherId,
+        classId,
+        currentAcademicYear.id,
+        userSchool.id
+      );
+
+      await ActivityLogService.logActivity({
+        schoolId: userSchool.id,
+        action: 'CHANGE_TEACHER',
+        entityType: 'teacher_assignment',
+        entityId: classId,
+        level: 'info',
+        details: `Changement d'enseignant pour la classe`
+      });
+
+      await loadData();
+      alert(`Enseignant changé avec succès !`);
+    } catch (error: any) {
+      console.error('Erreur lors du changement:', error);
+      alert(`Erreur: ${error.message}`);
+    }
   };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-96">
+        <div className="text-center">
+          <RefreshCw className="h-8 w-8 text-blue-600 animate-spin mx-auto mb-4" />
+          <p className="text-gray-600">Chargement des classes...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center min-h-96">
+        <div className="text-center">
+          <AlertCircle className="h-8 w-8 text-red-600 mx-auto mb-4" />
+          <p className="text-red-600 mb-4">{error}</p>
+          <button
+            onClick={loadData}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+          >
+            Réessayer
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -199,13 +306,18 @@ const ClassManagement: React.FC = () => {
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-xl sm:text-2xl font-bold text-gray-800">Gestion des Classes</h1>
-          <p className="text-sm sm:text-base text-gray-600">Organisation des niveaux, classes et emplois du temps</p>
+          <p className="text-sm sm:text-base text-gray-600">
+            {userSchool?.name} - Année {currentAcademicYear?.name}
+          </p>
         </div>
         
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3 w-full sm:w-auto">
-          <button className="px-4 py-2 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors flex items-center justify-center space-x-2 text-sm sm:text-base">
-            <Calendar className="h-4 w-4" />
-            <span>Emplois du Temps</span>
+          <button 
+            onClick={loadData}
+            className="px-4 py-2 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors flex items-center justify-center space-x-2 text-sm sm:text-base"
+          >
+            <RefreshCw className="h-4 w-4" />
+            <span>Actualiser</span>
           </button>
           
           <button 
@@ -220,7 +332,7 @@ const ClassManagement: React.FC = () => {
 
       {/* Levels Overview */}
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-7 gap-3 sm:gap-4">
-        {levels.map((level, index) => (
+        {levelStats.map((level, index) => (
           <div key={index} className="bg-white p-3 sm:p-4 rounded-xl shadow-sm border border-gray-100">
             <div className="flex items-center justify-between mb-3">
               <span className={`px-2 sm:px-3 py-1 rounded-full text-xs sm:text-sm font-medium ${getColorClasses(level.color)}`}>
@@ -267,11 +379,12 @@ const ClassManagement: React.FC = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {classes.map((classItem, index) => {
-                const fillRate = (classItem.students / classItem.capacity) * 100;
+              {classes.map((classItem) => {
+                const fillRate = (classItem.current_students / classItem.capacity) * 100;
+                const teacher = classItem.teacher_assignment?.teacher;
                 
                 return (
-                  <tr key={index} className="hover:bg-gray-50 transition-colors">
+                  <tr key={classItem.id} className="hover:bg-gray-50 transition-colors">
                     <td className="px-3 sm:px-6 py-4">
                       <div className="flex items-center space-x-2 sm:space-x-3">
                         <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
@@ -282,7 +395,7 @@ const ClassManagement: React.FC = () => {
                         <div>
                           <p className="text-sm sm:text-base font-medium text-gray-800">{classItem.name}</p>
                           <p className="text-xs text-gray-500">
-                            {classItem.subjects.length} matières
+                            {classItem.subjects?.length || 0} matières
                           </p>
                         </div>
                       </div>
@@ -295,17 +408,26 @@ const ClassManagement: React.FC = () => {
                     </td>
                     
                     <td className="px-3 sm:px-6 py-4">
-                      <div>
-                        <p className="text-sm sm:text-base font-medium text-gray-800">{classItem.teacher}</p>
-                        <p className="text-xs text-gray-500">Enseignant unique</p>
-                      </div>
+                      {teacher ? (
+                        <div>
+                          <p className="text-sm sm:text-base font-medium text-gray-800">
+                            {teacher.first_name} {teacher.last_name}
+                          </p>
+                          <p className="text-xs text-gray-500">Enseignant unique</p>
+                        </div>
+                      ) : (
+                        <div>
+                          <p className="text-sm text-red-600 font-medium">Non assigné</p>
+                          <p className="text-xs text-red-500">Affectation requise</p>
+                        </div>
+                      )}
                     </td>
                     
                     <td className="px-3 sm:px-6 py-4">
                       <div className="flex items-center space-x-2">
                         <Users className="h-3 w-3 sm:h-4 sm:w-4 text-gray-400" />
                         <span className="text-sm sm:text-base text-gray-800">
-                          {classItem.students}/{classItem.capacity}
+                          {classItem.current_students}/{classItem.capacity}
                         </span>
                       </div>
                     </td>
@@ -327,39 +449,58 @@ const ClassManagement: React.FC = () => {
                       </div>
                     </td>
                     
-                 <td className="px-3 sm:px-6 py-4">
-  <div className="flex flex-col sm:flex-row items-start sm:items-center space-y-1 sm:space-y-0 sm:space-x-2">
-    <button 
-      onClick={() => handleManageClass(classItem)}
-      className="text-blue-600 hover:text-blue-800 text-xs sm:text-sm font-medium"
-    >
-      Gérer Classe
-    </button>
-    <span className="text-gray-300 hidden sm:inline">|</span>
-    <button 
-      onClick={() => handleViewSchedule(classItem)}
-      className="text-green-600 hover:text-green-800 text-xs sm:text-sm font-medium"
-    >
-      Planning
-    </button>
-    <span className="text-gray-300 hidden sm:inline">|</span>
-    <button 
-      onClick={() => handleChangeTeacher(classItem)}
-      className="text-purple-600 hover:text-purple-800 text-xs sm:text-sm font-medium"
-    >
-      Changer Enseignant
-    </button>
-  </div>
-</td>
+                    <td className="px-3 sm:px-6 py-4">
+                      <div className="flex flex-col sm:flex-row items-start sm:items-center space-y-1 sm:space-y-0 sm:space-x-2">
+                        <button 
+                          onClick={() => handleManageClass(classItem)}
+                          className="text-blue-600 hover:text-blue-800 text-xs sm:text-sm font-medium"
+                        >
+                          Gérer
+                        </button>
+                        <span className="text-gray-300 hidden sm:inline">|</span>
+                        <button 
+                          onClick={() => handleViewSchedule(classItem)}
+                          className="text-green-600 hover:text-green-800 text-xs sm:text-sm font-medium"
+                        >
+                          Planning
+                        </button>
+                        {teacher && (
+                          <>
+                            <span className="text-gray-300 hidden sm:inline">|</span>
+                            <button 
+                              onClick={() => handleChangeTeacher(classItem)}
+                              className="text-purple-600 hover:text-purple-800 text-xs sm:text-sm font-medium"
+                            >
+                              Changer Enseignant
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </td>
                   </tr>
                 );
               })}
             </tbody>
           </table>
         </div>
+
+        {classes.length === 0 && (
+          <div className="text-center py-12">
+            <Users className="h-16 w-16 text-gray-300 mx-auto mb-4" />
+            <h3 className="text-lg font-medium text-gray-800 mb-2">Aucune classe configurée</h3>
+            <p className="text-gray-600 mb-4">Commencez par créer votre première classe</p>
+            <button 
+              onClick={() => setShowAddModal(true)}
+              className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2 mx-auto"
+            >
+              <Plus className="h-5 w-5" />
+              <span>Créer une Classe</span>
+            </button>
+          </div>
+        )}
       </div>
 
-      {/* Teacher Assignment Modal Trigger */}
+      {/* Teacher Assignment Summary */}
       <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
         <div className="flex items-center justify-between">
           <div>
@@ -377,70 +518,83 @@ const ClassManagement: React.FC = () => {
         <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div className="p-4 border border-gray-100 rounded-lg">
             <p className="text-xs sm:text-sm text-gray-600">Classes sans enseignant</p>
-            <p className="text-xl sm:text-2xl font-bold text-red-600">2</p>
+            <p className="text-xl sm:text-2xl font-bold text-red-600">
+              {classes.filter(c => !c.teacher_assignment?.teacher).length}
+            </p>
           </div>
           <div className="p-4 border border-gray-100 rounded-lg">
             <p className="text-xs sm:text-sm text-gray-600">Enseignants disponibles</p>
-            <p className="text-xl sm:text-2xl font-bold text-green-600">5</p>
+            <p className="text-xl sm:text-2xl font-bold text-green-600">
+              {availableTeachers.length}
+            </p>
           </div>
           <div className="p-4 border border-gray-100 rounded-lg">
-            <p className="text-xs sm:text-sm text-gray-600">Changements ce mois</p>
-            <p className="text-xl sm:text-2xl font-bold text-blue-600">1</p>
+            <p className="text-xs sm:text-sm text-gray-600">Affectations actives</p>
+            <p className="text-xl sm:text-2xl font-bold text-blue-600">
+              {teacherAssignments.filter(a => a.is_active).length}
+            </p>
           </div>
         </div>
       </div>
 
-      {/* Add Class Modal */}
+      {/* Modals */}
       <AddClassModal
         isOpen={showAddModal}
         onClose={() => setShowAddModal(false)}
         onAddClass={handleAddClass}
-        availableTeachers={availableTeachers}
+        availableTeachers={availableTeachers.map(t => ({
+          id: t.id,
+          name: `${t.first_name} ${t.last_name}`,
+          isAvailable: true
+        }))}
       />
 
-      {/* Teacher Assignment Modal */}
       <TeacherAssignmentModal
         isOpen={showAssignmentModal}
         onClose={() => setShowAssignmentModal(false)}
         onAssignTeacher={handleTeacherAssignment}
       />
 
-      {/* Class Detail Modal */}
       {selectedClass && (
-        <ClassDetailModal
-          isOpen={showDetailModal}
-          onClose={() => {
-            setShowDetailModal(false);
-            setSelectedClass(null);
-          }}
-          classData={selectedClass}
-          onUpdateClass={handleUpdateClass}
-        />
-      )}
+        <>
+          <ClassDetailModal
+            isOpen={showDetailModal}
+            onClose={() => {
+              setShowDetailModal(false);
+              setSelectedClass(null);
+            }}
+            classData={selectedClass}
+            onUpdateClass={handleUpdateClass}
+          />
 
-      {/* Class Schedule Modal */}
-      {selectedClass && (
-        <ClassScheduleModal
-          isOpen={showScheduleModal}
-          onClose={() => {
-            setShowScheduleModal(false);
-            setSelectedClass(null);
-          }}
-          classData={selectedClass}
-        />
-      )}
+          <ClassScheduleModal
+            isOpen={showScheduleModal}
+            onClose={() => {
+              setShowScheduleModal(false);
+              setSelectedClass(null);
+            }}
+            classData={selectedClass}
+          />
 
-      {/* Change Teacher Modal */}
-      {selectedClass && (
-        <ChangeTeacherModal
-          isOpen={showChangeTeacherModal}
-          onClose={() => {
-            setShowChangeTeacherModal(false);
-            setSelectedClass(null);
-          }}
-          classData={selectedClass}
-          onChangeTeacher={handleTeacherChange}
-        />
+          {selectedClass.teacher_assignment?.teacher && (
+            <ChangeTeacherModal
+              isOpen={showChangeTeacherModal}
+              onClose={() => {
+                setShowChangeTeacherModal(false);
+                setSelectedClass(null);
+              }}
+              classData={{
+                id: selectedClass.id,
+                name: selectedClass.name,
+                level: selectedClass.level,
+                teacher: `${selectedClass.teacher_assignment.teacher.first_name} ${selectedClass.teacher_assignment.teacher.last_name}`,
+                teacherId: 'current-teacher-id',
+                subjects: selectedClass.subjects || []
+              }}
+              onChangeTeacher={handleTeacherChange}
+            />
+          )}
+        </>
       )}
     </div>
   );

@@ -1,5 +1,8 @@
 import React, { useState } from 'react';
 import { X, Users, User, ArrowRight, CheckCircle, AlertCircle, BookOpen, Calendar } from 'lucide-react';
+import { useAuth } from '../Auth/AuthProvider';
+import { TeacherService } from '../../services/teacherService';
+import { ClassService } from '../../services/classService';
 
 interface TeacherAssignmentModalProps {
   isOpen: boolean;
@@ -7,25 +10,23 @@ interface TeacherAssignmentModalProps {
   onAssignTeacher: (assignments: Assignment[]) => void;
 }
 
-interface Teacher {
+interface AvailableTeacher {
   id: string;
-  name: string;
-  qualification: string;
+  first_name: string;
+  last_name: string;
+  email: string;
+  qualification?: string;
   experience: string;
   specializations: string[];
-  currentClass: string | null;
-  isAvailable: boolean;
-}
+  performance_rating: number;
 
-interface ClassInfo {
+interface ClassWithoutTeacher {
   id: string;
   name: string;
   level: string;
-  currentTeacher: string | null;
-  studentCount: number;
+  current_students: number;
   capacity: number;
   subjects: string[];
-  needsTeacher: boolean;
 }
 
 interface Assignment {
@@ -33,7 +34,7 @@ interface Assignment {
   teacherName: string;
   classId: string;
   className: string;
-  subjects: string[];
+  salary: number;
 }
 
 const TeacherAssignmentModal: React.FC<TeacherAssignmentModalProps> = ({
@@ -41,151 +42,60 @@ const TeacherAssignmentModal: React.FC<TeacherAssignmentModalProps> = ({
   onClose,
   onAssignTeacher
 }) => {
-  const [teachers] = useState<Teacher[]>([
-    {
-      id: 'traore',
-      name: 'M. Moussa Traore',
-      qualification: 'Licence en Pédagogie',
-      experience: '8 ans',
-      specializations: ['Mathématiques', 'Sciences'],
-      currentClass: 'CI A',
-      isAvailable: false
-    },
-    {
-      id: 'kone',
-      name: 'Mme Aminata Kone',
-      qualification: 'CAP Petite Enfance',
-      experience: '12 ans',
-      specializations: ['Petite Enfance', 'Psychologie Enfantine'],
-      currentClass: 'Maternelle 1A',
-      isAvailable: false
-    },
-    {
-      id: 'sidibe',
-      name: 'M. Ibrahim Sidibe',
-      qualification: 'Licence en Lettres Modernes',
-      experience: '5 ans',
-      specializations: ['Littérature', 'Histoire'],
-      currentClass: 'CE2B',
-      isAvailable: false
-    },
-    {
-      id: 'coulibaly',
-      name: 'Mlle Fatoumata Coulibaly',
-      qualification: 'Licence en Sciences de l\'Éducation',
-      experience: '3 ans',
-      specializations: ['Pédagogie', 'Psychologie'],
-      currentClass: null,
-      isAvailable: true
-    },
-    {
-      id: 'sangare',
-      name: 'M. Sekou Sangare',
-      qualification: 'Maîtrise en Sciences Naturelles',
-      experience: '15 ans',
-      specializations: ['Sciences Naturelles', 'Environnement'],
-      currentClass: null,
-      isAvailable: true
-    },
-    {
-      id: 'diarra',
-      name: 'M. Bakary Diarra',
-      qualification: 'Licence en Mathématiques',
-      experience: '6 ans',
-      specializations: ['Mathématiques', 'Physique'],
-      currentClass: null,
-      isAvailable: true
-    },
-    {
-      id: 'keita',
-      name: 'Mme Salimata Keita',
-      qualification: 'Licence en Français',
-      experience: '4 ans',
-      specializations: ['Littérature', 'Grammaire'],
-      currentClass: null,
-      isAvailable: true
-    }
-  ]);
+  const { userSchool, currentAcademicYear } = useAuth();
+  const [availableTeachers, setAvailableTeachers] = useState<AvailableTeacher[]>([]);
+  const [classesWithoutTeacher, setClassesWithoutTeacher] = useState<ClassWithoutTeacher[]>([]);
+  const [assignedClasses, setAssignedClasses] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const [classes] = useState<ClassInfo[]>([
-    {
-      id: 'maternelle-1a',
-      name: 'Maternelle 1A',
-      level: 'Maternelle',
-      currentTeacher: 'Mme Aminata Kone',
-      studentCount: 25,
-      capacity: 30,
-      subjects: ['Éveil', 'Langage', 'Graphisme', 'Jeux éducatifs'],
-      needsTeacher: false
-    },
-    {
-      id: 'ci-a',
-      name: 'CI A',
-      level: 'CI',
-      currentTeacher: 'M. Moussa Traore',
-      studentCount: 32,
-      capacity: 35,
-      subjects: ['Français', 'Mathématiques', 'Éveil Scientifique', 'Éducation Civique'],
-      needsTeacher: false
-    },
-    {
-      id: 'ce2b',
-      name: 'CE2B',
-      level: 'CE2',
-      currentTeacher: 'M. Ibrahim Sidibe',
-      studentCount: 38,
-      capacity: 40,
-      subjects: ['Français', 'Mathématiques', 'Histoire-Géographie', 'Sciences', 'Éducation Civique'],
-      needsTeacher: false
-    },
-    {
-      id: 'cp1',
-      name: 'CP1',
-      level: 'CP',
-      currentTeacher: null,
-      studentCount: 30,
-      capacity: 35,
-      subjects: ['Français', 'Mathématiques', 'Éveil Scientifique', 'Éducation Civique', 'Dessin'],
-      needsTeacher: true
-    },
-    {
-      id: 'ce1b',
-      name: 'CE1B',
-      level: 'CE1',
-      currentTeacher: null,
-      studentCount: 28,
-      capacity: 40,
-      subjects: ['Français', 'Mathématiques', 'Histoire-Géographie', 'Sciences', 'Éducation Civique'],
-      needsTeacher: true
-    },
-    {
-      id: 'cm1b',
-      name: 'CM1B',
-      level: 'CM1',
-      currentTeacher: null,
-      studentCount: 0,
-      capacity: 45,
-      subjects: ['Français', 'Mathématiques', 'Histoire-Géographie', 'Sciences', 'Éducation Civique', 'Anglais'],
-      needsTeacher: true
-    }
-  ]);
 
   const [pendingAssignments, setPendingAssignments] = useState<Assignment[]>([]);
-  const [selectedTeacher, setSelectedTeacher] = useState<Teacher | null>(null);
-  const [selectedClass, setSelectedClass] = useState<ClassInfo | null>(null);
+  const [selectedTeacher, setSelectedTeacher] = useState<AvailableTeacher | null>(null);
+  const [selectedClass, setSelectedClass] = useState<ClassWithoutTeacher | null>(null);
 
-  const availableTeachers = teachers.filter(t => t.isAvailable);
-  const classesNeedingTeacher = classes.filter(c => c.needsTeacher);
-  const assignedClasses = classes.filter(c => !c.needsTeacher);
+  // Charger les données au montage
+  useEffect(() => {
+    if (isOpen && userSchool && currentAcademicYear) {
+      loadData();
+    }
+  }, [isOpen, userSchool, currentAcademicYear]);
+
+  const loadData = async () => {
+    if (!userSchool || !currentAcademicYear) return;
+
+    try {
+      setLoading(true);
+
+      const [teachers, allClasses, assignments] = await Promise.all([
+        TeacherService.getAvailableTeachers(userSchool.id, currentAcademicYear.id),
+        ClassService.getClasses(userSchool.id, currentAcademicYear.id),
+        TeacherService.getTeacherAssignments(userSchool.id, currentAcademicYear.id)
+      ]);
+
+      setAvailableTeachers(teachers);
+      
+      // Séparer les classes avec et sans enseignant
+      const withoutTeacher = allClasses.filter(c => !c.teacher_assignment?.teacher);
+      const withTeacher = allClasses.filter(c => c.teacher_assignment?.teacher);
+      
+      setClassesWithoutTeacher(withoutTeacher);
+      setAssignedClasses(withTeacher);
+
+    } catch (error) {
+      console.error('Erreur lors du chargement:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleAssignTeacher = () => {
     if (selectedTeacher && selectedClass) {
       const newAssignment: Assignment = {
         teacherId: selectedTeacher.id,
-        teacherName: selectedTeacher.name,
+        teacherName: `${selectedTeacher.first_name} ${selectedTeacher.last_name}`,
         classId: selectedClass.id,
         className: selectedClass.name,
-        subjects: selectedClass.subjects
+        salary: 150000 // Salaire par défaut
       };
 
       setPendingAssignments(prev => [
@@ -210,37 +120,37 @@ const TeacherAssignmentModal: React.FC<TeacherAssignmentModalProps> = ({
     }
   };
 
-  const getTeacherSuitability = (teacher: Teacher, classInfo: ClassInfo) => {
+  const getTeacherSuitability = (teacher: AvailableTeacher, classInfo: ClassWithoutTeacher) => {
     let score = 0;
     let reasons = [];
 
     // Vérifier les spécialisations
-    if (classInfo.level === 'Maternelle' && teacher.specializations.includes('Petite Enfance')) {
+    if (classInfo.level === 'Maternelle' && teacher.specializations?.includes('Petite Enfance')) {
       score += 3;
       reasons.push('Spécialisé en petite enfance');
     }
 
-    if (teacher.specializations.includes('Mathématiques') && classInfo.subjects.includes('Mathématiques')) {
+    if (teacher.specializations?.includes('Mathématiques') && classInfo.subjects?.includes('Mathématiques')) {
       score += 2;
       reasons.push('Spécialisé en mathématiques');
     }
 
-    if (teacher.specializations.includes('Sciences Naturelles') && classInfo.subjects.includes('Sciences')) {
+    if (teacher.specializations?.includes('Sciences Naturelles') && classInfo.subjects?.includes('Sciences')) {
       score += 2;
       reasons.push('Spécialisé en sciences');
     }
 
-    if (teacher.specializations.includes('Littérature') && classInfo.subjects.includes('Français')) {
+    if (teacher.specializations?.includes('Littérature') && classInfo.subjects?.includes('Français')) {
       score += 2;
       reasons.push('Spécialisé en français');
     }
 
     // Expérience
-    const experienceYears = parseInt(teacher.experience.split(' ')[0]) || 0;
-    if (experienceYears >= 10) {
+    const experienceYears = parseInt(teacher.experience?.split(' ')[0] || '0') || 0;
+    if (teacher.performance_rating >= 4.5) {
       score += 2;
       reasons.push('Très expérimenté');
-    } else if (experienceYears >= 5) {
+    } else if (teacher.performance_rating >= 4.0) {
       score += 1;
       reasons.push('Expérimenté');
     }
@@ -301,7 +211,7 @@ const TeacherAssignmentModal: React.FC<TeacherAssignmentModalProps> = ({
                 <AlertCircle className="h-5 w-5 text-red-600" />
                 <span className="text-sm font-medium text-red-800">Classes sans Enseignant</span>
               </div>
-              <p className="text-2xl font-bold text-red-600 mt-2">{classesNeedingTeacher.length}</p>
+              <p className="text-2xl font-bold text-red-600 mt-2">{classesWithoutTeacher.length}</p>
             </div>
             
             <div className="bg-green-50 p-4 rounded-lg">
@@ -339,6 +249,12 @@ const TeacherAssignmentModal: React.FC<TeacherAssignmentModalProps> = ({
               </h3>
               
               <div className="space-y-3 max-h-96 overflow-y-auto">
+                {loading ? (
+                  <div className="text-center py-8">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                    <p className="text-gray-600">Chargement...</p>
+                  </div>
+                ) : (
                 {availableTeachers.map((teacher) => (
                   <div
                     key={teacher.id}
@@ -353,13 +269,12 @@ const TeacherAssignmentModal: React.FC<TeacherAssignmentModalProps> = ({
                       <div className="flex items-center space-x-3">
                         <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
                           <span className="text-blue-600 font-medium">
-                            {teacher.name.split(' ')[1]?.[0] || teacher.name[0]}
-                            {teacher.name.split(' ')[2]?.[0] || teacher.name.split(' ')[1]?.[0] || ''}
+                            {teacher.first_name[0]}{teacher.last_name[0]}
                           </span>
                         </div>
                         <div>
-                          <h4 className="font-medium text-gray-800">{teacher.name}</h4>
-                          <p className="text-sm text-gray-600">{teacher.qualification}</p>
+                          <h4 className="font-medium text-gray-800">{teacher.first_name} {teacher.last_name}</h4>
+                          <p className="text-sm text-gray-600">{teacher.qualification || 'Qualification non renseignée'}</p>
                           <p className="text-xs text-gray-500">Expérience: {teacher.experience}</p>
                         </div>
                       </div>
@@ -374,15 +289,21 @@ const TeacherAssignmentModal: React.FC<TeacherAssignmentModalProps> = ({
                     <div className="mt-3">
                       <p className="text-xs text-gray-600 mb-2">Spécialisations:</p>
                       <div className="flex flex-wrap gap-1">
-                        {teacher.specializations.map(spec => (
+                        {(teacher.specializations || []).map(spec => (
                           <span key={spec} className="px-2 py-1 bg-purple-100 text-purple-700 rounded text-xs">
                             {spec}
                           </span>
                         ))}
+                        {(!teacher.specializations || teacher.specializations.length === 0) && (
+                          <span className="px-2 py-1 bg-gray-100 text-gray-600 rounded text-xs">
+                            Polyvalent
+                          </span>
+                        )}
                       </div>
                     </div>
                   </div>
                 ))}
+                )}
                 
                 {availableTeachers.length === 0 && (
                   <div className="text-center py-8">
@@ -402,7 +323,7 @@ const TeacherAssignmentModal: React.FC<TeacherAssignmentModalProps> = ({
               </h3>
               
               <div className="space-y-3 max-h-96 overflow-y-auto">
-                {classesNeedingTeacher.map((classInfo) => {
+                {classesWithoutTeacher.map((classInfo) => {
                   const suitability = selectedTeacher ? getTeacherSuitability(selectedTeacher, classInfo) : null;
                   
                   return (
@@ -426,7 +347,7 @@ const TeacherAssignmentModal: React.FC<TeacherAssignmentModalProps> = ({
                             <h4 className="font-medium text-gray-800">{classInfo.name}</h4>
                             <p className="text-sm text-gray-600">{classInfo.level}</p>
                             <p className="text-xs text-gray-500">
-                              {classInfo.studentCount}/{classInfo.capacity} élèves
+                              {classInfo.current_students}/{classInfo.capacity} élèves
                             </p>
                           </div>
                         </div>
@@ -448,14 +369,14 @@ const TeacherAssignmentModal: React.FC<TeacherAssignmentModalProps> = ({
                       <div className="mt-3">
                         <p className="text-xs text-gray-600 mb-2">Matières à enseigner:</p>
                         <div className="flex flex-wrap gap-1">
-                          {classInfo.subjects.slice(0, 4).map(subject => (
+                          {(classInfo.subjects || []).slice(0, 4).map(subject => (
                             <span key={subject} className="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs">
                               {subject}
                             </span>
                           ))}
-                          {classInfo.subjects.length > 4 && (
+                          {(classInfo.subjects || []).length > 4 && (
                             <span className="px-2 py-1 bg-gray-100 text-gray-600 rounded text-xs">
-                              +{classInfo.subjects.length - 4}
+                              +{(classInfo.subjects || []).length - 4}
                             </span>
                           )}
                         </div>
@@ -475,7 +396,7 @@ const TeacherAssignmentModal: React.FC<TeacherAssignmentModalProps> = ({
                   );
                 })}
                 
-                {classesNeedingTeacher.length === 0 && (
+                {classesWithoutTeacher.length === 0 && !loading && (
                   <div className="text-center py-8">
                     <CheckCircle className="h-12 w-12 text-green-500 mx-auto mb-4" />
                     <p className="text-green-600 font-medium">Toutes les classes ont un enseignant !</p>
@@ -604,27 +525,26 @@ const TeacherAssignmentModal: React.FC<TeacherAssignmentModalProps> = ({
                       </div>
                     </div>
                     
-                    <button className="text-blue-600 hover:text-blue-800 text-sm font-medium">
+                        {classInfo.current_students}/{classInfo.capacity} élèves
                       Changer
                     </button>
                   </div>
-                  
+                    Enseignant: {classInfo.teacher_assignment?.teacher 
+                      ? `${classInfo.teacher_assignment.teacher.first_name} ${classInfo.teacher_assignment.teacher.last_name}`
+                      : 'Non assigné'
+                    }
                   <div className="mt-3 p-3 bg-gray-50 rounded">
                     <p className="text-sm font-medium text-gray-700 mb-1">
-                      Enseignant: {classInfo.currentTeacher}
+                    {(classInfo.subjects || []).slice(0, 3).map(subject => (
                     </p>
                     <div className="flex flex-wrap gap-1">
                       {classInfo.subjects.slice(0, 3).map(subject => (
                         <span key={subject} className="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs">
-                          {subject}
+                    {(classInfo.subjects || []).length > 3 && (
                         </span>
-                      ))}
-                      {classInfo.subjects.length > 3 && (
-                        <span className="px-2 py-1 bg-gray-100 text-gray-600 rounded text-xs">
-                          +{classInfo.subjects.length - 3}
-                        </span>
-                      )}
-                    </div>
+                        +{(classInfo.subjects || []).length - 3}
+                  <div className="mt-3 text-sm text-green-700">
+                    <p><strong>Salaire:</strong> {assignment.salary.toLocaleString()} FCFA/mois</p>
                   </div>
                 </div>
               ))}
@@ -632,12 +552,12 @@ const TeacherAssignmentModal: React.FC<TeacherAssignmentModalProps> = ({
           </div>
 
           {/* Recommandations automatiques */}
-          {availableTeachers.length > 0 && classesNeedingTeacher.length > 0 && (
+          {availableTeachers.length > 0 && classesWithoutTeacher.length > 0 && (
             <div className="mt-8 p-4 bg-yellow-50 rounded-lg border border-yellow-200">
               <h3 className="font-medium text-yellow-800 mb-3">Recommandations Automatiques</h3>
               
               <div className="space-y-2">
-                {classesNeedingTeacher.slice(0, 3).map((classInfo) => {
+                {classesWithoutTeacher.slice(0, 3).map((classInfo) => {
                   const bestTeacher = availableTeachers
                     .map(teacher => ({
                       teacher,
@@ -659,7 +579,7 @@ const TeacherAssignmentModal: React.FC<TeacherAssignmentModalProps> = ({
                     <div key={classInfo.id} className="flex items-center justify-between p-3 bg-white rounded border">
                       <div className="flex items-center space-x-3">
                         <span className="text-sm text-gray-700">
-                          <strong>{classInfo.name}</strong> → <strong>{bestTeacher.teacher.name}</strong>
+                          <strong>{classInfo.name}</strong> → <strong>{bestTeacher.teacher.first_name} {bestTeacher.teacher.last_name}</strong>
                         </span>
                         <span className={`px-2 py-1 rounded-full text-xs font-medium border ${getSuitabilityColor(bestTeacher.suitability.level)}`}>
                           {bestTeacher.suitability.level}

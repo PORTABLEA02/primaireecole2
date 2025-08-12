@@ -1,24 +1,15 @@
 import React, { useState } from 'react';
-import { X, Users, BookOpen, User, MapPin, Calendar, Edit, Save, Phone, Mail, Award, Clock, TrendingUp } from 'lucide-react';
+import { X, Users, BookOpen, User, MapPin, Calendar, Edit, Save, Phone, Mail, Award, Clock, TrendingUp, RefreshCw } from 'lucide-react';
+import { ClassService } from '../../services/classService';
+import { useAuth } from '../Auth/AuthProvider';
 
 interface ClassDetailModalProps {
   isOpen: boolean;
   onClose: () => void;
-  classData: ClassData;
-  onUpdateClass: (updatedClass: ClassData) => void;
+  classData: any;
+  onUpdateClass: (updatedClass: any) => void;
 }
 
-interface ClassData {
-  id: string;
-  name: string;
-  level: string;
-  students: number;
-  capacity: number;
-  teacher: string;
-  teacherId: string;
-  subjects: string[];
-  classroom?: string;
-}
 
 interface Student {
   id: string;
@@ -39,61 +30,41 @@ const ClassDetailModal: React.FC<ClassDetailModalProps> = ({
   classData,
   onUpdateClass
 }) => {
+  const { userSchool, currentAcademicYear } = useAuth();
   const [activeTab, setActiveTab] = useState<'overview' | 'students' | 'academic' | 'settings'>('overview');
   const [isEditing, setIsEditing] = useState(false);
   const [editData, setEditData] = useState(classData);
+  const [classStudents, setClassStudents] = useState<any[]>([]);
+  const [classStats, setClassStats] = useState<any>(null);
+  const [loading, setLoading] = useState(false);
 
-  // Données d'exemple des élèves de la classe
-  const [students] = useState<Student[]>([
-    {
-      id: '1',
-      firstName: 'Kofi',
-      lastName: 'Mensah',
-      age: 11,
-      parentPhone: '+223 70 11 22 33',
-      parentEmail: 'mensah.parent@email.com',
-      enrollmentDate: '2024-09-01',
-      paymentStatus: 'À jour',
-      lastGrade: 14.5,
-      attendance: 95
-    },
-    {
-      id: '2',
-      firstName: 'Aminata',
-      lastName: 'Traore',
-      age: 10,
-      parentPhone: '+223 75 44 55 66',
-      parentEmail: 'traore.family@email.com',
-      enrollmentDate: '2024-09-01',
-      paymentStatus: 'Partiel',
-      lastGrade: 16.0,
-      attendance: 98
-    },
-    {
-      id: '3',
-      firstName: 'Ibrahim',
-      lastName: 'Kone',
-      age: 11,
-      parentPhone: '+223 65 77 88 99',
-      parentEmail: 'kone.ibrahim@email.com',
-      enrollmentDate: '2024-09-01',
-      paymentStatus: 'En retard',
-      lastGrade: 12.5,
-      attendance: 92
-    },
-    {
-      id: '4',
-      firstName: 'Fatoumata',
-      lastName: 'Diallo',
-      age: 10,
-      parentPhone: '+223 78 99 00 11',
-      parentEmail: 'diallo.fam@email.com',
-      enrollmentDate: '2024-09-01',
-      paymentStatus: 'À jour',
-      lastGrade: 15.5,
-      attendance: 96
+  // Charger les données de la classe
+  useEffect(() => {
+    if (isOpen && classData && userSchool && currentAcademicYear) {
+      loadClassData();
     }
-  ]);
+  }, [isOpen, classData, userSchool, currentAcademicYear]);
+
+  const loadClassData = async () => {
+    if (!classData || !userSchool || !currentAcademicYear) return;
+
+    try {
+      setLoading(true);
+
+      const [students, stats] = await Promise.all([
+        ClassService.getClassDetails(classData.id, currentAcademicYear.id),
+        ClassService.getClassStats(classData.id, currentAcademicYear.id)
+      ]);
+
+      setClassStudents(students);
+      setClassStats(stats);
+
+    } catch (error) {
+      console.error('Erreur lors du chargement des données de la classe:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleSave = () => {
     onUpdateClass(editData);
@@ -116,14 +87,29 @@ const ClassDetailModal: React.FC<ClassDetailModalProps> = ({
     return 'text-red-600';
   };
 
-  const classStats = {
-    averageAge: students.reduce((sum, s) => sum + s.age, 0) / students.length,
-    averageGrade: students.filter(s => s.lastGrade).reduce((sum, s) => sum + (s.lastGrade || 0), 0) / students.filter(s => s.lastGrade).length,
-    averageAttendance: students.reduce((sum, s) => sum + s.attendance, 0) / students.length,
-    paymentUpToDate: students.filter(s => s.paymentStatus === 'À jour').length,
-    paymentLate: students.filter(s => s.paymentStatus === 'En retard').length,
-    paymentPartial: students.filter(s => s.paymentStatus === 'Partiel').length
+  const calculateAge = (birthDate: string) => {
+    const today = new Date();
+    const birth = new Date(birthDate);
+    let age = today.getFullYear() - birth.getFullYear();
+    const monthDiff = today.getMonth() - birth.getMonth();
+    
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) {
+      age--;
+    }
+    
+    return age;
   };
+
+  const computedStats = React.useMemo(() => {
+    if (!classStudents.length) return null;
+
+    return {
+      averageAge: classStudents.reduce((sum, s) => sum + calculateAge(s.date_of_birth), 0) / classStudents.length,
+      paymentUpToDate: classStudents.filter(s => s.payment_status === 'À jour').length,
+      paymentLate: classStudents.filter(s => s.payment_status === 'En retard').length,
+      paymentPartial: classStudents.filter(s => s.payment_status === 'Partiel').length
+    };
+  }, [classStudents]);
 
   if (!isOpen) return null;
 
@@ -141,8 +127,13 @@ const ClassDetailModal: React.FC<ClassDetailModalProps> = ({
               </div>
               <div>
                 <h2 className="text-2xl font-bold text-gray-800">{classData.name}</h2>
-                <p className="text-gray-600">{classData.level} • {classData.students}/{classData.capacity} élèves</p>
-                <p className="text-sm text-gray-500">Enseignant: {classData.teacher}</p>
+                <p className="text-gray-600">{classData.level} • {classData.current_students}/{classData.capacity} élèves</p>
+                <p className="text-sm text-gray-500">
+                  Enseignant: {classData.teacher_assignment?.teacher 
+                    ? `${classData.teacher_assignment.teacher.first_name} ${classData.teacher_assignment.teacher.last_name}`
+                    : 'Non assigné'
+                  }
+                </p>
               </div>
             </div>
             <button
@@ -173,7 +164,7 @@ const ClassDetailModal: React.FC<ClassDetailModalProps> = ({
                   : 'border-transparent text-gray-500 hover:text-gray-700'
               }`}
             >
-              Élèves ({students.length})
+              Élèves ({classStudents.length})
             </button>
             <button
               onClick={() => setActiveTab('academic')}
@@ -208,7 +199,7 @@ const ClassDetailModal: React.FC<ClassDetailModalProps> = ({
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-sm text-blue-600">Effectif</p>
-                      <p className="text-2xl font-bold text-blue-800">{classData.students}/{classData.capacity}</p>
+                      <p className="text-2xl font-bold text-blue-800">{classData.current_students}/{classData.capacity}</p>
                     </div>
                     <Users className="h-6 w-6 text-blue-600" />
                   </div>
@@ -216,41 +207,51 @@ const ClassDetailModal: React.FC<ClassDetailModalProps> = ({
                     <div className="w-full bg-blue-200 rounded-full h-2">
                       <div 
                         className="bg-blue-600 h-2 rounded-full"
-                        style={{ width: `${(classData.students / classData.capacity) * 100}%` }}
+                        style={{ width: `${(classData.current_students / classData.capacity) * 100}%` }}
                       ></div>
                     </div>
                   </div>
                 </div>
 
-                <div className="bg-green-50 p-4 rounded-lg">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm text-green-600">Moyenne Classe</p>
-                      <p className="text-2xl font-bold text-green-800">{classStats.averageGrade.toFixed(1)}/20</p>
+                {classStats && (
+                  <>
+                    <div className="bg-green-50 p-4 rounded-lg">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm text-green-600">Moyenne Classe</p>
+                          <p className="text-2xl font-bold text-green-800">
+                            {classStats.classAverage ? classStats.classAverage.toFixed(1) : '--'}/20
+                          </p>
+                        </div>
+                        <TrendingUp className="h-6 w-6 text-green-600" />
+                      </div>
                     </div>
-                    <TrendingUp className="h-6 w-6 text-green-600" />
-                  </div>
-                </div>
 
-                <div className="bg-purple-50 p-4 rounded-lg">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm text-purple-600">Assiduité</p>
-                      <p className="text-2xl font-bold text-purple-800">{classStats.averageAttendance.toFixed(0)}%</p>
+                    <div className="bg-purple-50 p-4 rounded-lg">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm text-purple-600">Taux de Réussite</p>
+                          <p className="text-2xl font-bold text-purple-800">
+                            {classStats.passRate ? classStats.passRate.toFixed(0) : '--'}%
+                          </p>
+                        </div>
+                        <Award className="h-6 w-6 text-purple-600" />
+                      </div>
                     </div>
-                    <Calendar className="h-6 w-6 text-purple-600" />
-                  </div>
-                </div>
+                  </>
+                )}
 
-                <div className="bg-orange-50 p-4 rounded-lg">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm text-orange-600">Âge Moyen</p>
-                      <p className="text-2xl font-bold text-orange-800">{classStats.averageAge.toFixed(1)} ans</p>
+                {computedStats && (
+                  <div className="bg-orange-50 p-4 rounded-lg">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm text-orange-600">Âge Moyen</p>
+                        <p className="text-2xl font-bold text-orange-800">{computedStats.averageAge.toFixed(1)} ans</p>
+                      </div>
+                      <Clock className="h-6 w-6 text-orange-600" />
                     </div>
-                    <Clock className="h-6 w-6 text-orange-600" />
                   </div>
-                </div>
+                )}
               </div>
 
               {/* Informations de la classe */}
@@ -264,39 +265,53 @@ const ClassDetailModal: React.FC<ClassDetailModalProps> = ({
                     </div>
                     <div className="flex justify-between">
                       <span className="text-gray-600">Enseignant titulaire:</span>
-                      <span className="font-medium">{classData.teacher}</span>
+                      <span className="font-medium">
+                        {classData.teacher_assignment?.teacher 
+                          ? `${classData.teacher_assignment.teacher.first_name} ${classData.teacher_assignment.teacher.last_name}`
+                          : 'Non assigné'
+                        }
+                      </span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-gray-600">Salle de classe:</span>
-                      <span className="font-medium">Salle 12</span>
+                      <span className="font-medium">
+                        {classData.classroom_assignment?.classroom?.name || 'Non assignée'}
+                      </span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-gray-600">Matières enseignées:</span>
-                      <span className="font-medium">{classData.subjects.length}</span>
+                      <span className="font-medium">{classData.subjects?.length || 0}</span>
                     </div>
                   </div>
                 </div>
 
                 <div className="bg-white border border-gray-200 rounded-lg p-6">
                   <h3 className="text-lg font-semibold text-gray-800 mb-4">Situation Financière</h3>
-                  <div className="space-y-3">
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Paiements à jour:</span>
-                      <span className="font-medium text-green-600">{classStats.paymentUpToDate} élèves</span>
+                  {computedStats ? (
+                    <div className="space-y-3">
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Paiements à jour:</span>
+                        <span className="font-medium text-green-600">{computedStats.paymentUpToDate} élèves</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Paiements en retard:</span>
+                        <span className="font-medium text-red-600">{computedStats.paymentLate} élèves</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Paiements partiels:</span>
+                        <span className="font-medium text-yellow-600">{computedStats.paymentPartial} élèves</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Taux de collecte:</span>
+                        <span className="font-medium">{Math.round((computedStats.paymentUpToDate / classStudents.length) * 100)}%</span>
+                      </div>
                     </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Paiements en retard:</span>
-                      <span className="font-medium text-red-600">{classStats.paymentLate} élèves</span>
+                  ) : (
+                    <div className="text-center py-4">
+                      <RefreshCw className="h-6 w-6 text-gray-400 animate-spin mx-auto mb-2" />
+                      <p className="text-gray-500">Chargement...</p>
                     </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Paiements partiels:</span>
-                      <span className="font-medium text-yellow-600">{classStats.paymentPartial} élèves</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Taux de collecte:</span>
-                      <span className="font-medium">{Math.round((classStats.paymentUpToDate / students.length) * 100)}%</span>
-                    </div>
-                  </div>
+                  )}
                 </div>
               </div>
 
@@ -304,10 +319,12 @@ const ClassDetailModal: React.FC<ClassDetailModalProps> = ({
               <div className="bg-white border border-gray-200 rounded-lg p-6">
                 <h3 className="text-lg font-semibold text-gray-800 mb-4">Matières du Programme</h3>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                  {classData.subjects.map(subject => (
+                  {(classData.subjects || []).map(subject => (
                     <div key={subject} className="p-3 bg-blue-50 rounded-lg border border-blue-200">
                       <p className="font-medium text-blue-800">{subject}</p>
-                      <p className="text-xs text-blue-600">Enseigné par {classData.teacher.split(' ')[1]}</p>
+                      <p className="text-xs text-blue-600">
+                        Enseigné par {classData.teacher_assignment?.teacher?.first_name || 'Enseignant'}
+                      </p>
                     </div>
                   ))}
                 </div>
@@ -325,6 +342,12 @@ const ClassDetailModal: React.FC<ClassDetailModalProps> = ({
                 </button>
               </div>
 
+              {loading ? (
+                <div className="text-center py-8">
+                  <RefreshCw className="h-8 w-8 text-blue-600 animate-spin mx-auto mb-4" />
+                  <p className="text-gray-600">Chargement des élèves...</p>
+                </div>
+              ) : (
               <div className="overflow-x-auto">
                 <table className="w-full">
                   <thead className="bg-gray-50">
@@ -332,24 +355,23 @@ const ClassDetailModal: React.FC<ClassDetailModalProps> = ({
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Élève</th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Contact Parent</th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Paiement</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Dernière Note</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Assiduité</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Inscription</th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
-                    {students.map((student) => (
-                      <tr key={student.id} className="hover:bg-gray-50">
+                    {classStudents.map((student) => (
+                      <tr key={student.student_id} className="hover:bg-gray-50">
                         <td className="px-6 py-4">
                           <div className="flex items-center space-x-3">
                             <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
                               <span className="text-blue-600 font-medium">
-                                {student.firstName[0]}{student.lastName[0]}
+                                {student.first_name[0]}{student.last_name[0]}
                               </span>
                             </div>
                             <div>
-                              <p className="font-medium text-gray-800">{student.firstName} {student.lastName}</p>
-                              <p className="text-sm text-gray-500">{student.age} ans</p>
+                              <p className="font-medium text-gray-800">{student.first_name} {student.last_name}</p>
+                              <p className="text-sm text-gray-500">{calculateAge(student.date_of_birth)} ans • {student.gender}</p>
                             </div>
                           </div>
                         </td>
@@ -358,43 +380,36 @@ const ClassDetailModal: React.FC<ClassDetailModalProps> = ({
                           <div className="space-y-1">
                             <div className="flex items-center space-x-2">
                               <Phone className="h-3 w-3 text-gray-400" />
-                              <span className="text-sm text-gray-600">{student.parentPhone}</span>
+                              <span className="text-sm text-gray-600">
+                                {student.father_phone || student.mother_phone || 'Non renseigné'}
+                              </span>
                             </div>
                             <div className="flex items-center space-x-2">
                               <Mail className="h-3 w-3 text-gray-400" />
-                              <span className="text-sm text-gray-600">{student.parentEmail}</span>
+                              <span className="text-sm text-gray-600">{student.parent_email}</span>
                             </div>
                           </div>
                         </td>
                         
                         <td className="px-6 py-4">
-                          <span className={`px-3 py-1 rounded-full text-sm font-medium ${getPaymentStatusColor(student.paymentStatus)}`}>
-                            {student.paymentStatus}
+                          <span className={`px-3 py-1 rounded-full text-sm font-medium ${getPaymentStatusColor(student.payment_status)}`}>
+                            {student.payment_status}
                           </span>
+                          <p className="text-xs text-gray-500 mt-1">
+                            {student.paid_amount.toLocaleString()}/{student.total_fees.toLocaleString()} FCFA
+                          </p>
                         </td>
                         
                         <td className="px-6 py-4">
-                          {student.lastGrade ? (
-                            <span className={`font-bold ${getGradeColor(student.lastGrade)}`}>
-                              {student.lastGrade}/20
+                          <div>
+                            <p className="text-sm text-gray-800">
+                              {new Date(student.enrollment_date).toLocaleDateString('fr-FR')}
+                            </p>
+                            <span className={`inline-block px-2 py-1 rounded-full text-xs font-medium mt-1 ${
+                              student.is_active ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
+                            }`}>
+                              {student.is_active ? 'Actif' : 'Inactif'}
                             </span>
-                          ) : (
-                            <span className="text-gray-400">--</span>
-                          )}
-                        </td>
-                        
-                        <td className="px-6 py-4">
-                          <div className="flex items-center space-x-2">
-                            <div className="w-16 bg-gray-200 rounded-full h-2">
-                              <div 
-                                className={`h-2 rounded-full ${
-                                  student.attendance >= 95 ? 'bg-green-500' :
-                                  student.attendance >= 85 ? 'bg-yellow-500' : 'bg-red-500'
-                                }`}
-                                style={{ width: `${student.attendance}%` }}
-                              ></div>
-                            </div>
-                            <span className="text-sm text-gray-600">{student.attendance}%</span>
                           </div>
                         </td>
                         
@@ -408,6 +423,14 @@ const ClassDetailModal: React.FC<ClassDetailModalProps> = ({
                   </tbody>
                 </table>
               </div>
+              )}
+
+              {!loading && classStudents.length === 0 && (
+                <div className="text-center py-8">
+                  <Users className="h-12 w-12 text-gray-300 mx-auto mb-4" />
+                  <p className="text-gray-500">Aucun élève inscrit dans cette classe</p>
+                </div>
+              )}
             </div>
           )}
 
@@ -419,30 +442,34 @@ const ClassDetailModal: React.FC<ClassDetailModalProps> = ({
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="bg-white border border-gray-200 rounded-lg p-6">
                   <h4 className="font-medium text-gray-800 mb-4">Performances par Matière</h4>
-                  <div className="space-y-3">
-                    {classData.subjects.map(subject => {
-                      const randomGrade = 10 + Math.random() * 8; // Simulation
-                      return (
-                        <div key={subject} className="flex items-center justify-between">
-                          <span className="text-gray-700">{subject}</span>
+                  {classStats?.subjectStats ? (
+                    <div className="space-y-3">
+                      {classStats.subjectStats.map((subjectStat: any) => (
+                        <div key={subjectStat.subject} className="flex items-center justify-between">
+                          <span className="text-gray-700">{subjectStat.subject}</span>
                           <div className="flex items-center space-x-2">
                             <div className="w-20 bg-gray-200 rounded-full h-2">
                               <div 
                                 className={`h-2 rounded-full ${
-                                  randomGrade >= 14 ? 'bg-green-500' :
-                                  randomGrade >= 12 ? 'bg-yellow-500' : 'bg-red-500'
+                                  subjectStat.average >= 14 ? 'bg-green-500' :
+                                  subjectStat.average >= 12 ? 'bg-yellow-500' : 'bg-red-500'
                                 }`}
-                                style={{ width: `${(randomGrade / 20) * 100}%` }}
+                                style={{ width: `${(subjectStat.average / 20) * 100}%` }}
                               ></div>
                             </div>
-                            <span className={`font-medium ${getGradeColor(randomGrade)}`}>
-                              {randomGrade.toFixed(1)}/20
+                            <span className={`font-medium ${getGradeColor(subjectStat.average)}`}>
+                              {subjectStat.average.toFixed(1)}/20
                             </span>
                           </div>
                         </div>
-                      );
-                    })}
-                  </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-4">
+                      <BookOpen className="h-8 w-8 text-gray-300 mx-auto mb-2" />
+                      <p className="text-gray-500">Aucune note saisie</p>
+                    </div>
+                  )}
                 </div>
 
                 <div className="bg-white border border-gray-200 rounded-lg p-6">

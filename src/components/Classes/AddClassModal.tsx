@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { X, Users, BookOpen, User, MapPin } from 'lucide-react';
+import { X, Users, BookOpen, User, MapPin, AlertCircle } from 'lucide-react';
+import { SUBJECTS_BY_LEVEL, FEES_BY_LEVEL } from '../../utils/constants';
 
 interface AddClassModalProps {
   isOpen: boolean;
@@ -21,7 +22,7 @@ interface NewClassData {
   teacherId: string;
   teacherName: string;
   subjects: string[];
-  classroom?: string;
+  salary?: number;
 }
 
 const AddClassModal: React.FC<AddClassModalProps> = ({
@@ -37,7 +38,7 @@ const AddClassModal: React.FC<AddClassModalProps> = ({
     teacherId: '',
     teacherName: '',
     subjects: [],
-    classroom: ''
+    salary: 150000
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -52,15 +53,6 @@ const AddClassModal: React.FC<AddClassModalProps> = ({
     'CM2'
   ];
 
-  const subjectsByLevel = {
-    'Maternelle': ['Éveil', 'Langage', 'Graphisme', 'Jeux éducatifs', 'Motricité'],
-    'CI': ['Français', 'Mathématiques', 'Éveil Scientifique', 'Éducation Civique', 'Dessin'],
-    'CP': ['Français', 'Mathématiques', 'Éveil Scientifique', 'Éducation Civique', 'Dessin'],
-    'CE1': ['Français', 'Mathématiques', 'Histoire-Géographie', 'Sciences', 'Éducation Civique', 'Dessin'],
-    'CE2': ['Français', 'Mathématiques', 'Histoire-Géographie', 'Sciences', 'Éducation Civique', 'Dessin'],
-    'CM1': ['Français', 'Mathématiques', 'Histoire-Géographie', 'Sciences', 'Éducation Civique', 'Anglais', 'Dessin'],
-    'CM2': ['Français', 'Mathématiques', 'Histoire-Géographie', 'Sciences', 'Éducation Civique', 'Anglais', 'Dessin']
-  };
 
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
@@ -116,7 +108,7 @@ const AddClassModal: React.FC<AddClassModalProps> = ({
     setFormData(prev => ({
       ...prev,
       level,
-      subjects: subjectsByLevel[level as keyof typeof subjectsByLevel] || []
+      subjects: SUBJECTS_BY_LEVEL[level as keyof typeof SUBJECTS_BY_LEVEL] || []
     }));
   };
 
@@ -210,12 +202,12 @@ const AddClassModal: React.FC<AddClassModalProps> = ({
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Capacité (nombre d'élèves) *
+                  Capacité Maximum *
                 </label>
                 <input
                   type="number"
                   min="10"
-                  max="50"
+                  max="60"
                   value={formData.capacity}
                   onChange={(e) => setFormData(prev => ({ ...prev, capacity: parseInt(e.target.value) || 30 }))}
                   className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
@@ -227,15 +219,18 @@ const AddClassModal: React.FC<AddClassModalProps> = ({
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Salle de Classe
+                  Salaire Enseignant (FCFA)
                 </label>
                 <input
-                  type="text"
-                  value={formData.classroom}
-                  onChange={(e) => setFormData(prev => ({ ...prev, classroom: e.target.value }))}
-                  placeholder="Ex: Salle 12, Labo 1..."
+                  type="number"
+                  min="100000"
+                  max="500000"
+                  step="5000"
+                  value={formData.salary}
+                  onChange={(e) => setFormData(prev => ({ ...prev, salary: parseInt(e.target.value) || 150000 }))}
                   className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
+                <p className="text-sm text-gray-500 mt-1">Salaire mensuel de l'enseignant</p>
               </div>
             </div>
           </div>
@@ -280,11 +275,11 @@ const AddClassModal: React.FC<AddClassModalProps> = ({
               
               <div className="p-4 bg-gray-50 rounded-lg">
                 <p className="text-sm text-gray-600 mb-3">
-                  Matières du programme officiel pour le niveau {formData.level}:
+                  Matières du programme officiel malien pour le niveau {formData.level}:
                 </p>
                 
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                  {(subjectsByLevel[formData.level as keyof typeof subjectsByLevel] || []).map(subject => (
+                  {(SUBJECTS_BY_LEVEL[formData.level as keyof typeof SUBJECTS_BY_LEVEL] || []).map(subject => (
                     <label key={subject} className="flex items-center space-x-2 cursor-pointer">
                       <input
                         type="checkbox"
@@ -299,6 +294,14 @@ const AddClassModal: React.FC<AddClassModalProps> = ({
                 
                 {errors.subjects && <p className="text-red-500 text-sm mt-2">{errors.subjects}</p>}
               </div>
+              
+              {formData.level && (
+                <div className="p-3 bg-blue-50 rounded-lg">
+                  <p className="text-sm text-blue-700">
+                    <strong>Frais de scolarité recommandés:</strong> {FEES_BY_LEVEL[formData.level as keyof typeof FEES_BY_LEVEL]?.toLocaleString() || 'Non défini'} FCFA/an
+                  </p>
+                </div>
+              )}
             </div>
           )}
 
@@ -311,7 +314,7 @@ const AddClassModal: React.FC<AddClassModalProps> = ({
                 <p><strong>Enseignant:</strong> {formData.teacherName}</p>
                 <p><strong>Capacité:</strong> {formData.capacity} élèves</p>
                 <p><strong>Matières:</strong> {formData.subjects.length} matières sélectionnées</p>
-                {formData.classroom && <p><strong>Salle:</strong> {formData.classroom}</p>}
+                <p><strong>Salaire:</strong> {formData.salary?.toLocaleString()} FCFA/mois</p>
               </div>
             </div>
           )}

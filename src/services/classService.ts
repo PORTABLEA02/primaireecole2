@@ -105,7 +105,7 @@ export class ClassService {
       const { data, error } = await supabase
         .rpc('get_class_academic_stats', {
           p_class_id: classId,
-          p_academic_year_id: academicYearId
+          p_grade_period_id: gradePeriodId
         });
 
       if (error) throw error;
