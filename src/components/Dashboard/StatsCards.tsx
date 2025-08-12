@@ -1,6 +1,6 @@
 import React from 'react';
 import { Users, GraduationCap, DollarSign, AlertTriangle } from 'lucide-react';
-import { useSchool } from '../../contexts/SchoolContext';
+import { useAuth } from '../Auth/AuthProvider';
 
 const statsData = [
   {
@@ -38,7 +38,7 @@ const statsData = [
 ];
 
 const StatsCards: React.FC = () => {
-  const { currentSchool } = useSchool();
+  const { userSchool } = useAuth();
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
@@ -71,7 +71,7 @@ const StatsCards: React.FC = () => {
                 {stat.change}
               </span>
               <span className="text-xs sm:text-sm text-gray-500 ml-2">
-                {currentSchool?.name} - tranche précédente
+                {userSchool?.name} - tranche précédente
               </span>
             </div>
           </div>

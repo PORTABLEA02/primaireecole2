@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { School } from '../types/School';
+import { useAuth } from '../components/Auth/AuthProvider';
 
 interface SchoolContextType {
   currentSchool: School | null;
@@ -26,6 +27,7 @@ interface SchoolProviderProps {
 }
 
 export const SchoolProvider: React.FC<SchoolProviderProps> = ({ children }) => {
+  const { userSchool, isAuthenticated } = useAuth();
   const [currentSchool, setCurrentSchoolState] = useState<School | null>(null);
   const [schools, setSchools] = useState<School[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -127,6 +129,15 @@ export const SchoolProvider: React.FC<SchoolProviderProps> = ({ children }) => {
   ];
 
   useEffect(() => {
+    // Si l'utilisateur est authentifié et a une école, l'utiliser
+    if (isAuthenticated && userSchool) {
+      setCurrentSchoolState(userSchool);
+      setSchools([userSchool]); // Pour l'instant, on ne charge que l'école de l'utilisateur
+      setIsLoading(false);
+      return;
+    }
+
+    // Sinon, charger depuis localStorage (fallback)
     // Charger les écoles depuis le localStorage ou utiliser les données par défaut
     const savedSchools = localStorage.getItem('ecoletech_schools');
     const savedCurrentSchool = localStorage.getItem('ecoletech_current_school');
@@ -153,7 +164,7 @@ export const SchoolProvider: React.FC<SchoolProviderProps> = ({ children }) => {
     }
     
     setIsLoading(false);
-  }, []);
+  }, [isAuthenticated, userSchool]);
 
   const setCurrentSchool = (school: School) => {
     setCurrentSchoolState(school);

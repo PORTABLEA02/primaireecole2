@@ -1,14 +1,12 @@
 import React from 'react';
-import { useSchool } from '../../contexts/SchoolContext';
-import { useAcademicYear } from '../../contexts/AcademicYearContext';
+import { useAuth } from '../Auth/AuthProvider';
 import StatsCards from './StatsCards';
 import RecentActivities from './RecentActivities';
 import QuickActions from './QuickActions';
 import AcademicOverview from './AcademicOverview';
 
 const Dashboard: React.FC = () => {
-  const { currentSchool } = useSchool();
-  const { currentAcademicYear } = useAcademicYear();
+  const { userSchool, currentAcademicYear } = useAuth();
 
   return (
     <div className="space-y-6">
@@ -16,7 +14,7 @@ const Dashboard: React.FC = () => {
         <div>
           <h1 className="text-xl sm:text-2xl font-bold text-gray-800">Tableau de Bord</h1>
           <p className="text-sm sm:text-base text-gray-600">
-            {currentSchool?.name} - Année scolaire {currentAcademicYear}
+            {userSchool?.name} - Année scolaire {currentAcademicYear?.name || '2024-2025'}
           </p>
         </div>
       </div>

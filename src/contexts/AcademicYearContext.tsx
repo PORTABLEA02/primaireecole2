@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { useAuth } from '../components/Auth/AuthProvider';
 
 interface AcademicYearContextType {
   currentAcademicYear: string;
@@ -23,10 +24,25 @@ interface AcademicYearProviderProps {
 }
 
 export const AcademicYearProvider: React.FC<AcademicYearProviderProps> = ({ children }) => {
+  const { currentAcademicYear: authAcademicYear, isAuthenticated } = useAuth();
   const [currentAcademicYear, setCurrentAcademicYearState] = useState('2024-2025');
   const [availableYears, setAvailableYears] = useState(['2024-2025', '2023-2024', '2022-2023']);
 
   useEffect(() => {
+    // Si l'utilisateur est authentifié et a une année scolaire active, l'utiliser
+    if (isAuthenticated && authAcademicYear) {
+      setCurrentAcademicYearState(authAcademicYear.name);
+      // Ajouter l'année à la liste si elle n'y est pas
+      setAvailableYears(prev => {
+        if (!prev.includes(authAcademicYear.name)) {
+          return [authAcademicYear.name, ...prev].sort().reverse();
+        }
+        return prev;
+      });
+      return;
+    }
+
+    // Sinon, charger depuis localStorage (fallback)
     // Charger l'année scolaire courante depuis le localStorage
     const savedYear = localStorage.getItem('ecoletech_current_academic_year');
     if (savedYear) {
@@ -42,7 +58,7 @@ export const AcademicYearProvider: React.FC<AcademicYearProviderProps> = ({ chil
         console.error('Erreur lors du chargement des années:', error);
       }
     }
-  }, []);
+  }, [isAuthenticated, authAcademicYear]);
 
   const setCurrentAcademicYear = (year: string) => {
     setCurrentAcademicYearState(year);

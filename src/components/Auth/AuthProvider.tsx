@@ -2,10 +2,13 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { User as SupabaseUser } from '@supabase/supabase-js';
 import { supabase } from '../../lib/supabase';
 import { User as UserType } from '../../types/User';
+import { School } from '../../types/School';
 
 interface AuthContextType {
   user: UserType | null;
   supabaseUser: SupabaseUser | null;
+  userSchool: School | null;
+  currentAcademicYear: any | null;
   isAuthenticated: boolean;
   loading: boolean;
   login: (email: string, password: string, rememberMe?: boolean) => Promise<boolean>;
@@ -31,6 +34,8 @@ interface AuthProviderProps {
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [user, setUser] = useState<UserType | null>(null);
   const [supabaseUser, setSupabaseUser] = useState<SupabaseUser | null>(null);
+  const [userSchool, setUserSchool] = useState<School | null>(null);
+  const [currentAcademicYear, setCurrentAcademicYear] = useState<any | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -47,6 +52,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         } else if (event === 'SIGNED_OUT') {
           setUser(null);
           setSupabaseUser(null);
+          setUserSchool(null);
+          setCurrentAcademicYear(null);
           setIsAuthenticated(false);
         }
         setLoading(false);
@@ -93,6 +100,58 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         return;
       }
 
+      // Charger l'année scolaire active
+      const { data: activeYear, error: yearError } = await supabase
+        .from('academic_years')
+        .select('*')
+        .eq('is_active', true)
+        .single();
+
+      if (yearError) {
+        console.warn('Aucune année scolaire active trouvée:', yearError);
+        // Créer une année par défaut si aucune n'existe
+        const { data: newYear, error: createError } = await supabase
+          .from('academic_years')
+          .insert({
+            name: '2024-2025',
+            start_date: '2024-10-01',
+            end_date: '2025-06-30',
+            is_active: true,
+            periods: [
+              {
+                id: '1',
+                name: 'Trimestre 1',
+                startDate: '2024-10-01',
+                endDate: '2024-12-20',
+                type: 'Trimestre'
+              },
+              {
+                id: '2',
+                name: 'Trimestre 2',
+                startDate: '2025-01-08',
+                endDate: '2025-03-28',
+                type: 'Trimestre'
+              },
+              {
+                id: '3',
+                name: 'Trimestre 3',
+                startDate: '2025-04-07',
+                endDate: '2025-06-30',
+                type: 'Trimestre'
+              }
+            ]
+          })
+          .select()
+          .single();
+
+        if (createError) {
+          console.error('Erreur lors de la création de l\'année par défaut:', createError);
+        } else {
+          setCurrentAcademicYear(newYear);
+        }
+      } else {
+        setCurrentAcademicYear(activeYear);
+      }
       // Mapper vers notre type User
       const userData: UserType = {
         id: profile.id,
@@ -106,6 +165,33 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         lastLogin: profile.last_login
       };
 
+      // Mapper les données de l'école
+      if (profile.school) {
+        const schoolData: School = {
+          id: profile.school.id,
+          name: profile.school.name,
+          address: profile.school.address,
+          phone: profile.school.phone,
+          email: profile.school.email,
+          director: profile.school.director,
+          foundedYear: profile.school.founded_year,
+          studentCapacity: profile.school.student_capacity,
+          motto: profile.school.motto,
+          logo: profile.school.logo_url,
+          isActive: profile.school.is_active,
+          createdDate: profile.school.created_at,
+          settings: profile.school.settings || {
+            currency: 'FCFA',
+            academicYear: '2024-2025',
+            periods: [],
+            feeTypes: [],
+            paymentMethods: [],
+            lateFeePercentage: 5,
+            scholarshipPercentage: 10
+          }
+        };
+        setUserSchool(schoolData);
+      }
       setUser(userData);
       setSupabaseUser(supabaseUser);
       setIsAuthenticated(true);
@@ -176,6 +262,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
       setUser(null);
       setSupabaseUser(null);
+      setUserSchool(null);
+      setCurrentAcademicYear(null);
       setIsAuthenticated(false);
     } catch (error: any) {
       console.error('Erreur lors de la déconnexion:', error);
@@ -194,6 +282,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const value: AuthContextType = {
     user,
     supabaseUser,
+    userSchool,
+    currentAcademicYear,
     isAuthenticated,
     loading,
     login,
