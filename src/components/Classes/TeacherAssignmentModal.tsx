@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, Users, User, ArrowRight, CheckCircle, AlertCircle, BookOpen, Calendar } from 'lucide-react';
 import { useAuth } from '../Auth/AuthProvider';
 import { TeacherService } from '../../services/teacherService';
@@ -19,6 +19,7 @@ interface AvailableTeacher {
   experience: string;
   specializations: string[];
   performance_rating: number;
+}
 
 interface ClassWithoutTeacher {
   id: string;
@@ -47,8 +48,6 @@ const TeacherAssignmentModal: React.FC<TeacherAssignmentModalProps> = ({
   const [classesWithoutTeacher, setClassesWithoutTeacher] = useState<ClassWithoutTeacher[]>([]);
   const [assignedClasses, setAssignedClasses] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-
-
   const [pendingAssignments, setPendingAssignments] = useState<Assignment[]>([]);
   const [selectedTeacher, setSelectedTeacher] = useState<AvailableTeacher | null>(null);
   const [selectedClass, setSelectedClass] = useState<ClassWithoutTeacher | null>(null);
@@ -145,8 +144,7 @@ const TeacherAssignmentModal: React.FC<TeacherAssignmentModalProps> = ({
       reasons.push('Spécialisé en français');
     }
 
-    // Expérience
-    const experienceYears = parseInt(teacher.experience?.split(' ')[0] || '0') || 0;
+    // Expérience et performance
     if (teacher.performance_rating >= 4.5) {
       score += 2;
       reasons.push('Très expérimenté');
@@ -255,57 +253,57 @@ const TeacherAssignmentModal: React.FC<TeacherAssignmentModalProps> = ({
                     <p className="text-gray-600">Chargement...</p>
                   </div>
                 ) : (
-                {availableTeachers.map((teacher) => (
-                  <div
-                    key={teacher.id}
-                    onClick={() => setSelectedTeacher(teacher)}
-                    className={`p-4 border-2 rounded-lg cursor-pointer transition-all ${
-                      selectedTeacher?.id === teacher.id
-                        ? 'border-blue-500 bg-blue-50'
-                        : 'border-gray-200 hover:border-blue-300 hover:bg-blue-50'
-                    }`}
-                  >
-                    <div className="flex items-start justify-between">
-                      <div className="flex items-center space-x-3">
-                        <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
-                          <span className="text-blue-600 font-medium">
-                            {teacher.first_name[0]}{teacher.last_name[0]}
-                          </span>
+                  availableTeachers.map((teacher) => (
+                    <div
+                      key={teacher.id}
+                      onClick={() => setSelectedTeacher(teacher)}
+                      className={`p-4 border-2 rounded-lg cursor-pointer transition-all ${
+                        selectedTeacher?.id === teacher.id
+                          ? 'border-blue-500 bg-blue-50'
+                          : 'border-gray-200 hover:border-blue-300 hover:bg-blue-50'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between">
+                        <div className="flex items-center space-x-3">
+                          <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
+                            <span className="text-blue-600 font-medium">
+                              {teacher.first_name[0]}{teacher.last_name[0]}
+                            </span>
+                          </div>
+                          <div>
+                            <h4 className="font-medium text-gray-800">{teacher.first_name} {teacher.last_name}</h4>
+                            <p className="text-sm text-gray-600">{teacher.qualification || 'Qualification non renseignée'}</p>
+                            <p className="text-xs text-gray-500">Expérience: {teacher.experience}</p>
+                          </div>
                         </div>
-                        <div>
-                          <h4 className="font-medium text-gray-800">{teacher.first_name} {teacher.last_name}</h4>
-                          <p className="text-sm text-gray-600">{teacher.qualification || 'Qualification non renseignée'}</p>
-                          <p className="text-xs text-gray-500">Expérience: {teacher.experience}</p>
+                        
+                        <div className="text-right">
+                          <span className="px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs font-medium">
+                            Disponible
+                          </span>
                         </div>
                       </div>
                       
-                      <div className="text-right">
-                        <span className="px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs font-medium">
-                          Disponible
-                        </span>
+                      <div className="mt-3">
+                        <p className="text-xs text-gray-600 mb-2">Spécialisations:</p>
+                        <div className="flex flex-wrap gap-1">
+                          {(teacher.specializations || []).map(spec => (
+                            <span key={spec} className="px-2 py-1 bg-purple-100 text-purple-700 rounded text-xs">
+                              {spec}
+                            </span>
+                          ))}
+                          {(!teacher.specializations || teacher.specializations.length === 0) && (
+                            <span className="px-2 py-1 bg-gray-100 text-gray-600 rounded text-xs">
+                              Polyvalent
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </div>
-                    
-                    <div className="mt-3">
-                      <p className="text-xs text-gray-600 mb-2">Spécialisations:</p>
-                      <div className="flex flex-wrap gap-1">
-                        {(teacher.specializations || []).map(spec => (
-                          <span key={spec} className="px-2 py-1 bg-purple-100 text-purple-700 rounded text-xs">
-                            {spec}
-                          </span>
-                        ))}
-                        {(!teacher.specializations || teacher.specializations.length === 0) && (
-                          <span className="px-2 py-1 bg-gray-100 text-gray-600 rounded text-xs">
-                            Polyvalent
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                ))}
+                  ))
                 )}
                 
-                {availableTeachers.length === 0 && (
+                {availableTeachers.length === 0 && !loading && (
                   <div className="text-center py-8">
                     <User className="h-12 w-12 text-gray-300 mx-auto mb-4" />
                     <p className="text-gray-500">Aucun enseignant disponible</p>
@@ -319,7 +317,7 @@ const TeacherAssignmentModal: React.FC<TeacherAssignmentModalProps> = ({
             <div className="space-y-4">
               <h3 className="text-lg font-semibold text-gray-800 flex items-center space-x-2">
                 <Users className="h-5 w-5" />
-                <span>Classes sans Enseignant ({classesNeedingTeacher.length})</span>
+                <span>Classes sans Enseignant ({classesWithoutTeacher.length})</span>
               </h3>
               
               <div className="space-y-3 max-h-96 overflow-y-auto">
@@ -417,7 +415,9 @@ const TeacherAssignmentModal: React.FC<TeacherAssignmentModalProps> = ({
                   {selectedTeacher ? (
                     <div className="p-4 bg-blue-100 rounded-lg">
                       <User className="h-8 w-8 text-blue-600 mx-auto mb-2" />
-                      <p className="font-medium text-blue-800">{selectedTeacher.name}</p>
+                      <p className="font-medium text-blue-800">
+                        {selectedTeacher.first_name} {selectedTeacher.last_name}
+                      </p>
                       <p className="text-sm text-blue-600">{selectedTeacher.qualification}</p>
                     </div>
                   ) : (
@@ -435,7 +435,7 @@ const TeacherAssignmentModal: React.FC<TeacherAssignmentModalProps> = ({
                     <div className="p-4 bg-purple-100 rounded-lg">
                       <Users className="h-8 w-8 text-purple-600 mx-auto mb-2" />
                       <p className="font-medium text-purple-800">{selectedClass.name}</p>
-                      <p className="text-sm text-purple-600">{selectedClass.level} • {selectedClass.studentCount} élèves</p>
+                      <p className="text-sm text-purple-600">{selectedClass.level} • {selectedClass.current_students} élèves</p>
                     </div>
                   ) : (
                     <div className="p-4 border-2 border-dashed border-gray-300 rounded-lg">
@@ -491,12 +491,8 @@ const TeacherAssignmentModal: React.FC<TeacherAssignmentModalProps> = ({
                       </button>
                     </div>
                     
-                    <div className="mt-3 flex flex-wrap gap-1">
-                      {assignment.subjects.map(subject => (
-                        <span key={subject} className="px-2 py-1 bg-green-100 text-green-700 rounded text-xs">
-                          {subject}
-                        </span>
-                      ))}
+                    <div className="mt-3 text-sm text-green-700">
+                      <p><strong>Salaire:</strong> {assignment.salary.toLocaleString()} FCFA/mois</p>
                     </div>
                   </div>
                 ))}
@@ -520,31 +516,35 @@ const TeacherAssignmentModal: React.FC<TeacherAssignmentModalProps> = ({
                         <h4 className="font-medium text-gray-800">{classInfo.name}</h4>
                         <p className="text-sm text-gray-600">{classInfo.level}</p>
                         <p className="text-xs text-gray-500">
-                          {classInfo.studentCount}/{classInfo.capacity} élèves
+                          {classInfo.current_students}/{classInfo.capacity} élèves
                         </p>
                       </div>
                     </div>
                     
-                        {classInfo.current_students}/{classInfo.capacity} élèves
+                    <button className="text-purple-600 hover:text-purple-800 text-sm font-medium">
                       Changer
                     </button>
                   </div>
-                    Enseignant: {classInfo.teacher_assignment?.teacher 
-                      ? `${classInfo.teacher_assignment.teacher.first_name} ${classInfo.teacher_assignment.teacher.last_name}`
-                      : 'Non assigné'
-                    }
+                  
                   <div className="mt-3 p-3 bg-gray-50 rounded">
                     <p className="text-sm font-medium text-gray-700 mb-1">
-                    {(classInfo.subjects || []).slice(0, 3).map(subject => (
+                      Enseignant: {classInfo.teacher_assignment?.teacher 
+                        ? `${classInfo.teacher_assignment.teacher.first_name} ${classInfo.teacher_assignment.teacher.last_name}`
+                        : 'Non assigné'
+                      }
                     </p>
                     <div className="flex flex-wrap gap-1">
-                      {classInfo.subjects.slice(0, 3).map(subject => (
+                      {(classInfo.subjects || []).slice(0, 3).map(subject => (
                         <span key={subject} className="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs">
-                    {(classInfo.subjects || []).length > 3 && (
+                          {subject}
                         </span>
-                        +{(classInfo.subjects || []).length - 3}
-                  <div className="mt-3 text-sm text-green-700">
-                    <p><strong>Salaire:</strong> {assignment.salary.toLocaleString()} FCFA/mois</p>
+                      ))}
+                      {(classInfo.subjects || []).length > 3 && (
+                        <span className="px-2 py-1 bg-gray-100 text-gray-600 rounded text-xs">
+                          +{(classInfo.subjects || []).length - 3}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
               ))}

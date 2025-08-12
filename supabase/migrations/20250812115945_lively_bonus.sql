@@ -253,7 +253,7 @@ ON CONFLICT (id) DO UPDATE SET
 
 -- Insérer les classes
 INSERT INTO classes (
-  id,
+ 
   school_id,
   academic_year_id,
   name,
@@ -262,11 +262,14 @@ INSERT INTO classes (
   current_students,
   subjects
 ) VALUES 
-  ('class-maternelle-1a', 'ecole-tech-moderne', 'academic-year-2024-2025', 'Maternelle 1A', 'Maternelle', 30, 25, '["Éveil", "Langage", "Graphisme", "Jeux éducatifs"]'::jsonb),
-  ('class-ci-a', 'ecole-tech-moderne', 'academic-year-2024-2025', 'CI A', 'CI', 35, 32, '["Français", "Mathématiques", "Éveil Scientifique", "Éducation Civique"]'::jsonb),
-  ('class-cp1', 'ecole-tech-moderne', 'academic-year-2024-2025', 'CP1', 'CP', 35, 30, '["Français", "Mathématiques", "Éveil Scientifique", "Éducation Civique", "Dessin"]'::jsonb),
-  ('class-ce2b', 'ecole-tech-moderne', 'academic-year-2024-2025', 'CE2B', 'CE2', 40, 38, '["Français", "Mathématiques", "Histoire-Géographie", "Sciences", "Éducation Civique"]'::jsonb),
-  ('class-cm2a', 'ecole-tech-moderne', 'academic-year-2024-2025', 'CM2A', 'CM2', 45, 42, '["Français", "Mathématiques", "Histoire-Géographie", "Sciences", "Éducation Civique", "Anglais"]'::jsonb)
+  ( '2abd8a58-178b-4b23-969a-0ca895bc644c', 'd45f9a48-2356-40d9-9315-c047fbe6a5a6', 'garderie', 'garderie', 30, 25, '["Éveil", "Langage", "Graphisme", "Jeux éducatifs"]'::jsonb),
+  ( '2abd8a58-178b-4b23-969a-0ca895bc644c', 'd45f9a48-2356-40d9-9315-c047fbe6a5a6', 'Maternelle 1', 'Maternelle', 30, 25, '["Éveil", "Langage", "Graphisme", "Jeux éducatifs"]'::jsonb),
+  ( '2abd8a58-178b-4b23-969a-0ca895bc644c', 'd45f9a48-2356-40d9-9315-c047fbe6a5a6', 'Maternelle 2', 'Maternelle', 30, 25, '["Éveil", "Langage", "Graphisme", "Jeux éducatifs"]'::jsonb),
+  ( '2abd8a58-178b-4b23-969a-0ca895bc644c', 'd45f9a48-2356-40d9-9315-c047fbe6a5a6', 'CI ', 'CI', 35, 32, '["Français", "Mathématiques", "Éveil Scientifique", "Éducation Civique"]'::jsonb),
+  ('2abd8a58-178b-4b23-969a-0ca895bc644c', 'd45f9a48-2356-40d9-9315-c047fbe6a5a6', 'CP', 'CP', 35, 30, '["Français", "Mathématiques", "Éveil Scientifique", "Éducation Civique", "Dessin"]'::jsonb),
+  ('2abd8a58-178b-4b23-969a-0ca895bc644c', 'd45f9a48-2356-40d9-9315-c047fbe6a5a6', 'CE2', 'CE2', 40, 38, '["Français", "Mathématiques", "Histoire-Géographie", "Sciences", "Éducation Civique"]'::jsonb),
+  ('2abd8a58-178b-4b23-969a-0ca895bc644c', 'd45f9a48-2356-40d9-9315-c047fbe6a5a6', 'CM1', 'CM1', 40, 38, '["Français", "Mathématiques", "Histoire-Géographie", "Sciences", "Éducation Civique"]'::jsonb),
+  ('2abd8a58-178b-4b23-969a-0ca895bc644c', 'd45f9a48-2356-40d9-9315-c047fbe6a5a6', 'CM2', 'CM2', 45, 42, '["Français", "Mathématiques", "Histoire-Géographie", "Sciences", "Éducation Civique", "Anglais"]'::jsonb)
 ON CONFLICT (id) DO UPDATE SET
   name = EXCLUDED.name,
   level = EXCLUDED.level,
