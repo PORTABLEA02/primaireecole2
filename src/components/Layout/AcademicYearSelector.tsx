@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Calendar, ChevronDown, Plus, Archive } from 'lucide-react';
 import { useAuth } from '../Auth/AuthProvider';
 import { supabase } from '../../lib/supabase';

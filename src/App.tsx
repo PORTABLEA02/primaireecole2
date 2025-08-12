@@ -144,13 +144,13 @@ const AppContent: React.FC = () => {
 
 function App() {
   return (
-    <AcademicYearProvider>
+    <AuthProvider>
       <SchoolProvider>
-        <AuthProvider>
+        <AcademicYearProvider>
           <AppContent />
-        </AuthProvider>
+        </AcademicYearProvider>
       </SchoolProvider>
-    </AcademicYearProvider>
+    </AuthProvider>
   );
 }
 

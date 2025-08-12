@@ -46,15 +46,22 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
     // Écouter les changements d'authentification
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
+      (event, session) => {
         if (event === 'SIGNED_IN' && session?.user) {
-          await loadUserProfile(session.user);
+          // Utiliser setTimeout pour éviter le deadlock
+          setTimeout(() => {
+            loadUserProfile(session.user);
+          }, 0);
         } else if (event === 'SIGNED_OUT') {
           setUser(null);
           setSupabaseUser(null);
           setUserSchool(null);
           setCurrentAcademicYear(null);
           setIsAuthenticated(false);
+        } else if (event === 'TOKEN_REFRESHED' && session?.user) {
+          // Pour le rafraîchissement de token, ne pas recharger le profil
+          // car cela peut causer un deadlock
+          setSupabaseUser(session.user);
         }
         setLoading(false);
       }
