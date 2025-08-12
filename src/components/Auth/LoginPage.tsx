@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Eye, EyeOff, School, Mail, Lock, AlertCircle, Loader, Database } from 'lucide-react';
+import { Eye, EyeOff, School, Mail, Lock, AlertCircle, Loader, Database, X } from 'lucide-react';
 import { useAuth } from './AuthProvider';
 
 interface LoginPageProps {
@@ -224,10 +224,11 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
         </div>
 
         {/* Modal Mot de passe oublié */}
-        {(localError || authError) && (
+        {showForgotPassword && (
           <ForgotPasswordModal
+            isOpen={showForgotPassword}
             onClose={() => setShowForgotPassword(false)}
-            <p className="text-red-700 text-sm">{localError || authError}</p>
+            onSubmit={handleForgotPassword}
           />
         )}
       </div>
@@ -237,9 +238,10 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
 
 // Modal pour mot de passe oublié
 const ForgotPasswordModal: React.FC<{
+  isOpen: boolean;
   onClose: () => void;
   onSubmit: (email: string) => void;
-}> = ({ onClose, onSubmit }) => {
+}> = ({ isOpen, onClose, onSubmit }) => {
   const [email, setEmail] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
@@ -252,6 +254,8 @@ const ForgotPasswordModal: React.FC<{
     onSubmit(email);
     setIsLoading(false);
   };
+
+  if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
