@@ -1,11 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, User, Users, Phone, Mail, MapPin, Calendar, DollarSign, BookOpen, AlertCircle } from 'lucide-react';
-import { useAcademicYear } from '../../contexts/AcademicYearContext';
+import { useAuth } from '../Auth/AuthProvider';
+import { StudentService } from '../../services/studentService';
 
 interface AddStudentModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onAddStudent: (studentData: NewStudentData) => void;
+  onAddStudent: (studentData: any, enrollmentData: any) => void;
 }
 
 interface NewStudentData {
@@ -33,11 +34,12 @@ interface NewStudentData {
   emergencyContactPhone: string;
   emergencyContactRelation: string;
   dateOfBirth: string;
-  class: string;
-  level: string;
-  parentEmail: string; // Email principal de contact
+  parentEmail: string;
   address: string;
-  enrollmentDate: string;
+}
+
+interface EnrollmentData {
+  classId: string;
   totalFees: number;
   initialPayment: number;
   paymentMethod: 'Espèces' | 'Mobile Money' | 'Virement Bancaire';
@@ -51,9 +53,10 @@ const AddStudentModal: React.FC<AddStudentModalProps> = ({
   onClose,
   onAddStudent
 }) => {
+  const { userSchool, currentAcademicYear } = useAuth();
   const [step, setStep] = useState<'student' | 'parent' | 'financial' | 'confirmation'>('student');
-  const { currentAcademicYear } = useAcademicYear();
-  const [formData, setFormData] = useState<NewStudentData>({
+  const [availableClasses, setAvailableClasses] = useState<any[]>([]);
+  const [studentData, setStudentData] = useState<NewStudentData>({
     firstName: '',
     lastName: '',
     gender: 'Masculin',
@@ -78,11 +81,12 @@ const AddStudentModal: React.FC<AddStudentModalProps> = ({
     emergencyContactPhone: '',
     emergencyContactRelation: '',
     dateOfBirth: '',
-    class: '',
-    level: '',
     parentEmail: '',
-    address: '',
-    enrollmentDate: new Date().toISOString().split('T')[0],
+    address: ''
+  });
+
+  const [enrollmentData, setEnrollmentData] = useState<EnrollmentData>({
+    classId: '',
     totalFees: 0,
     initialPayment: 0,
     paymentMethod: 'Espèces',
@@ -91,104 +95,82 @@ const AddStudentModal: React.FC<AddStudentModalProps> = ({
 
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  // Classes disponibles avec leurs frais
-  const classesWithFees = [
-    { name: 'Maternelle 1A', level: 'Maternelle', fees: 300000 },
-    { name: 'Maternelle 1B', level: 'Maternelle', fees: 300000 },
-    { name: 'Maternelle 2A', level: 'Maternelle', fees: 300000 },
-    { name: 'CI A', level: 'CI', fees: 350000 },
-    { name: 'CI B', level: 'CI', fees: 350000 },
-    { name: 'CP1', level: 'CP', fees: 350000 },
-    { name: 'CP2', level: 'CP', fees: 350000 },
-    { name: 'CE1A', level: 'CE1', fees: 400000 },
-    { name: 'CE1B', level: 'CE1', fees: 400000 },
-    { name: 'CE2A', level: 'CE2', fees: 400000 },
-    { name: 'CE2B', level: 'CE2', fees: 400000 },
-    { name: 'CM1A', level: 'CM1', fees: 450000 },
-    { name: 'CM1B', level: 'CM1', fees: 450000 },
-    { name: 'CM2A', level: 'CM2', fees: 450000 },
-    { name: 'CM2B', level: 'CM2', fees: 450000 }
-  ];
+  // Charger les classes disponibles
+  useEffect(() => {
+    if (isOpen && userSchool && currentAcademicYear) {
+      loadAvailableClasses();
+    }
+  }, [isOpen, userSchool, currentAcademicYear]);
 
-  const nationalities = [
-    'Malienne', 'Burkinabè', 'Ivoirienne', 'Sénégalaise', 'Guinéenne', 
-    'Nigérienne', 'Ghanéenne', 'Togolaise', 'Béninoise', 'Mauritanienne', 'Autre'
-  ];
+  const loadAvailableClasses = async () => {
+    if (!userSchool || !currentAcademicYear) return;
 
-  const languages = [
-    'Bambara', 'Peul', 'Soninké', 'Dogon', 'Malinké', 'Sonrhaï', 
-    'Tamasheq', 'Bobo', 'Sénoufo', 'Français', 'Autre'
-  ];
-
-  const religions = [
-    'Islam', 'Christianisme', 'Animisme', 'Autre', 'Non spécifié'
-  ];
-
-  const bloodTypes = [
-    'A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-', 'Non déterminé'
-  ];
-
-  const occupations = [
-    'Agriculteur/Agricultrice', 'Commerçant(e)', 'Fonctionnaire', 'Enseignant(e)', 
-    'Artisan(e)', 'Chauffeur', 'Ménagère', 'Ouvrier/Ouvrière', 'Cadre', 
-    'Professionnel libéral', 'Étudiant(e)', 'Sans emploi', 'Autre'
-  ];
+    try {
+      const classes = await StudentService.getAvailableClassesForEnrollment(
+        userSchool.id,
+        currentAcademicYear.id
+      );
+      setAvailableClasses(classes);
+    } catch (error) {
+      console.error('Erreur lors du chargement des classes:', error);
+    }
+  };
 
   const validateStep = (currentStep: string) => {
     const newErrors: Record<string, string> = {};
 
     if (currentStep === 'student') {
-      if (!formData.firstName.trim()) {
+      if (!studentData.firstName.trim()) {
         newErrors.firstName = 'Le prénom est requis';
       }
-      if (!formData.lastName.trim()) {
+      if (!studentData.lastName.trim()) {
         newErrors.lastName = 'Le nom est requis';
       }
-      if (!formData.birthPlace.trim()) {
+      if (!studentData.birthPlace.trim()) {
         newErrors.birthPlace = 'Le lieu de naissance est requis';
       }
-      if (!formData.dateOfBirth) {
+      if (!studentData.dateOfBirth) {
         newErrors.dateOfBirth = 'La date de naissance est requise';
-      }
-      if (!formData.class) {
-        newErrors.class = 'La classe est requise';
       }
     }
 
     if (currentStep === 'parent') {
-      if (!formData.fatherName.trim() && !formData.motherName.trim() && formData.guardianType === 'Parents') {
+      if (!studentData.fatherName.trim() && !studentData.motherName.trim() && studentData.guardianType === 'Parents') {
         newErrors.parentInfo = 'Au moins un parent doit être renseigné';
       }
-      if (!formData.fatherPhone.trim() && !formData.motherPhone.trim()) {
+      if (!studentData.fatherPhone.trim() && !studentData.motherPhone.trim()) {
         newErrors.parentPhone = 'Au moins un numéro de téléphone est requis';
       }
-      if (!formData.parentEmail.trim()) {
+      if (!studentData.parentEmail.trim()) {
         newErrors.parentEmail = 'L\'email est requis';
-      } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.parentEmail)) {
+      } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(studentData.parentEmail)) {
         newErrors.parentEmail = 'Format d\'email invalide';
       }
-      if (!formData.address.trim()) {
+      if (!studentData.address.trim()) {
         newErrors.address = 'L\'adresse est requise';
       }
-      if (!formData.emergencyContactName.trim()) {
+      if (!studentData.emergencyContactName.trim()) {
         newErrors.emergencyContactName = 'Le contact d\'urgence est requis';
       }
-      if (!formData.emergencyContactPhone.trim()) {
+      if (!studentData.emergencyContactPhone.trim()) {
         newErrors.emergencyContactPhone = 'Le téléphone du contact d\'urgence est requis';
       }
     }
 
     if (currentStep === 'financial') {
-      if (formData.initialPayment < 0) {
+      if (!enrollmentData.classId) {
+        newErrors.classId = 'Veuillez sélectionner une classe';
+      }
+      if (enrollmentData.initialPayment < 0) {
         newErrors.initialPayment = 'Le montant ne peut pas être négatif';
       }
-      if (formData.initialPayment > formData.totalFees) {
+      if (enrollmentData.initialPayment > enrollmentData.totalFees) {
         newErrors.initialPayment = 'Le paiement initial ne peut pas dépasser les frais totaux';
       }
-      if (formData.paymentMethod === 'Mobile Money' && !formData.mobileNumber) {
+      if (enrollmentData.paymentMethod === 'Mobile Money' && !enrollmentData.mobileNumber) {
         newErrors.mobileNumber = 'Numéro de téléphone requis pour Mobile Money';
       }
-      if (formData.paymentMethod === 'Virement Bancaire' && !formData.bankDetails) {
+      if (enrollmentData.paymentMethod === 'Virement Bancaire' && !enrollmentData.bankDetails) {
         newErrors.bankDetails = 'Détails bancaires requis pour le virement';
       }
     }
@@ -229,24 +211,43 @@ const AddStudentModal: React.FC<AddStudentModalProps> = ({
 
   const handleSubmit = () => {
     if (validateStep('financial')) {
-      onAddStudent(formData);
+      onAddStudent(studentData, enrollmentData);
       handleClose();
     }
   };
 
   const handleClose = () => {
     setStep('student');
-    setFormData({
+    setStudentData({
       firstName: '',
       lastName: '',
+      gender: 'Masculin',
+      nationality: 'Malienne',
+      birthPlace: '',
+      religion: '',
+      bloodType: '',
+      allergies: '',
+      previousSchool: '',
+      motherTongue: 'Bambara',
+      fatherName: '',
+      fatherPhone: '',
+      fatherOccupation: '',
+      motherName: '',
+      motherPhone: '',
+      motherOccupation: '',
+      guardianType: 'Parents',
+      numberOfSiblings: 0,
+      transportMode: 'À pied',
+      medicalInfo: '',
+      emergencyContactName: '',
+      emergencyContactPhone: '',
+      emergencyContactRelation: '',
       dateOfBirth: '',
-      class: '',
-      level: '',
-      parentName: '',
-      parentPhone: '',
       parentEmail: '',
-      address: '',
-      enrollmentDate: new Date().toISOString().split('T')[0],
+      address: ''
+    });
+    setEnrollmentData({
+      classId: '',
       totalFees: 0,
       initialPayment: 0,
       paymentMethod: 'Espèces',
@@ -256,30 +257,59 @@ const AddStudentModal: React.FC<AddStudentModalProps> = ({
     onClose();
   };
 
-  const handleClassChange = (className: string) => {
-    const selectedClass = classesWithFees.find(c => c.name === className);
+  const handleClassChange = (classId: string) => {
+    const selectedClass = availableClasses.find(c => c.id === classId);
     if (selectedClass) {
-      setFormData(prev => ({
+      // Calculer les frais selon le niveau
+      const feesByLevel: Record<string, number> = {
+        'Maternelle': 300000,
+        'CI': 350000,
+        'CP': 350000,
+        'CE1': 400000,
+        'CE2': 400000,
+        'CM1': 450000,
+        'CM2': 450000
+      };
+
+      const fees = feesByLevel[selectedClass.level] || 350000;
+
+      setEnrollmentData(prev => ({
         ...prev,
-        class: className,
-        level: selectedClass.level,
-        totalFees: selectedClass.fees
+        classId: classId,
+        totalFees: fees
       }));
     }
   };
 
   const calculateAge = (birthDate: string) => {
     if (!birthDate) return '';
-    const today = new Date();
-    const birth = new Date(birthDate);
-    const age = today.getFullYear() - birth.getFullYear();
-    const monthDiff = today.getMonth() - birth.getMonth();
-    
-    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) {
-      return (age - 1).toString();
-    }
-    return age.toString();
+    return StudentService.calculateAge(birthDate).toString();
   };
+
+  // Listes de données
+  const nationalities = [
+    'Malienne', 'Burkinabè', 'Ivoirienne', 'Sénégalaise', 'Guinéenne', 
+    'Nigérienne', 'Ghanéenne', 'Togolaise', 'Béninoise', 'Mauritanienne', 'Autre'
+  ];
+
+  const languages = [
+    'Bambara', 'Peul', 'Soninké', 'Dogon', 'Malinké', 'Sonrhaï', 
+    'Tamasheq', 'Bobo', 'Sénoufo', 'Français', 'Autre'
+  ];
+
+  const religions = [
+    'Islam', 'Christianisme', 'Animisme', 'Autre', 'Non spécifié'
+  ];
+
+  const bloodTypes = [
+    'A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-', 'Non déterminé'
+  ];
+
+  const occupations = [
+    'Agriculteur/Agricultrice', 'Commerçant(e)', 'Fonctionnaire', 'Enseignant(e)', 
+    'Artisan(e)', 'Chauffeur', 'Ménagère', 'Ouvrier/Ouvrière', 'Cadre', 
+    'Professionnel libéral', 'Étudiant(e)', 'Sans emploi', 'Autre'
+  ];
 
   if (!isOpen) return null;
 
@@ -355,8 +385,8 @@ const AddStudentModal: React.FC<AddStudentModalProps> = ({
                   </label>
                   <input
                     type="text"
-                    value={formData.firstName}
-                    onChange={(e) => setFormData(prev => ({ ...prev, firstName: e.target.value }))}
+                    value={studentData.firstName}
+                    onChange={(e) => setStudentData(prev => ({ ...prev, firstName: e.target.value }))}
                     className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
                       errors.firstName ? 'border-red-300' : 'border-gray-200'
                     }`}
@@ -370,8 +400,8 @@ const AddStudentModal: React.FC<AddStudentModalProps> = ({
                   </label>
                   <input
                     type="text"
-                    value={formData.lastName}
-                    onChange={(e) => setFormData(prev => ({ ...prev, lastName: e.target.value }))}
+                    value={studentData.lastName}
+                    onChange={(e) => setStudentData(prev => ({ ...prev, lastName: e.target.value }))}
                     className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
                       errors.lastName ? 'border-red-300' : 'border-gray-200'
                     }`}
@@ -386,8 +416,8 @@ const AddStudentModal: React.FC<AddStudentModalProps> = ({
                     Sexe *
                   </label>
                   <select
-                    value={formData.gender}
-                    onChange={(e) => setFormData(prev => ({ ...prev, gender: e.target.value as 'Masculin' | 'Féminin' }))}
+                    value={studentData.gender}
+                    onChange={(e) => setStudentData(prev => ({ ...prev, gender: e.target.value as 'Masculin' | 'Féminin' }))}
                     className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   >
                     <option value="Masculin">Masculin</option>
@@ -400,8 +430,8 @@ const AddStudentModal: React.FC<AddStudentModalProps> = ({
                     Nationalité *
                   </label>
                   <select
-                    value={formData.nationality}
-                    onChange={(e) => setFormData(prev => ({ ...prev, nationality: e.target.value }))}
+                    value={studentData.nationality}
+                    onChange={(e) => setStudentData(prev => ({ ...prev, nationality: e.target.value }))}
                     className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   >
                     {nationalities.map(nationality => (
@@ -415,8 +445,8 @@ const AddStudentModal: React.FC<AddStudentModalProps> = ({
                     Langue Maternelle *
                   </label>
                   <select
-                    value={formData.motherTongue}
-                    onChange={(e) => setFormData(prev => ({ ...prev, motherTongue: e.target.value }))}
+                    value={studentData.motherTongue}
+                    onChange={(e) => setStudentData(prev => ({ ...prev, motherTongue: e.target.value }))}
                     className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   >
                     {languages.map(language => (
@@ -433,15 +463,15 @@ const AddStudentModal: React.FC<AddStudentModalProps> = ({
                   </label>
                   <input
                     type="date"
-                    value={formData.dateOfBirth}
-                    onChange={(e) => setFormData(prev => ({ ...prev, dateOfBirth: e.target.value }))}
+                    value={studentData.dateOfBirth}
+                    onChange={(e) => setStudentData(prev => ({ ...prev, dateOfBirth: e.target.value }))}
                     className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
                       errors.dateOfBirth ? 'border-red-300' : 'border-gray-200'
                     }`}
                   />
                   {errors.dateOfBirth && <p className="text-red-500 text-sm mt-1">{errors.dateOfBirth}</p>}
-                  {formData.dateOfBirth && (
-                    <p className="text-sm text-gray-500 mt-1">Âge: {calculateAge(formData.dateOfBirth)} ans</p>
+                  {studentData.dateOfBirth && (
+                    <p className="text-sm text-gray-500 mt-1">Âge: {calculateAge(studentData.dateOfBirth)} ans</p>
                   )}
                 </div>
 
@@ -451,8 +481,8 @@ const AddStudentModal: React.FC<AddStudentModalProps> = ({
                   </label>
                   <input
                     type="text"
-                    value={formData.birthPlace}
-                    onChange={(e) => setFormData(prev => ({ ...prev, birthPlace: e.target.value }))}
+                    value={studentData.birthPlace}
+                    onChange={(e) => setStudentData(prev => ({ ...prev, birthPlace: e.target.value }))}
                     placeholder="Ville, Région, Pays"
                     className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
                       errors.birthPlace ? 'border-red-300' : 'border-gray-200'
@@ -462,41 +492,15 @@ const AddStudentModal: React.FC<AddStudentModalProps> = ({
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Date d'Inscription
-                  </label>
-                  <input
-                    type="date"
-                    value={formData.enrollmentDate}
-                    onChange={(e) => setFormData(prev => ({ ...prev, enrollmentDate: e.target.value }))}
-                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    École Précédente (Optionnel)
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.previousSchool || ''}
-                    onChange={(e) => setFormData(prev => ({ ...prev, previousSchool: e.target.value }))}
-                    placeholder="Nom de l'école précédente"
-                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
-                </div>
-              </div>
-
+              {/* Informations optionnelles */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Religion (Optionnel)
                   </label>
                   <select
-                    value={formData.religion || ''}
-                    onChange={(e) => setFormData(prev => ({ ...prev, religion: e.target.value }))}
+                    value={studentData.religion || ''}
+                    onChange={(e) => setStudentData(prev => ({ ...prev, religion: e.target.value }))}
                     className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   >
                     <option value="">Sélectionner</option>
@@ -511,8 +515,8 @@ const AddStudentModal: React.FC<AddStudentModalProps> = ({
                     Groupe Sanguin (Optionnel)
                   </label>
                   <select
-                    value={formData.bloodType || ''}
-                    onChange={(e) => setFormData(prev => ({ ...prev, bloodType: e.target.value }))}
+                    value={studentData.bloodType || ''}
+                    onChange={(e) => setStudentData(prev => ({ ...prev, bloodType: e.target.value }))}
                     className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   >
                     <option value="">Sélectionner</option>
@@ -530,88 +534,12 @@ const AddStudentModal: React.FC<AddStudentModalProps> = ({
                     type="number"
                     min="0"
                     max="20"
-                    value={formData.numberOfSiblings}
-                    onChange={(e) => setFormData(prev => ({ ...prev, numberOfSiblings: parseInt(e.target.value) || 0 }))}
+                    value={studentData.numberOfSiblings}
+                    onChange={(e) => setStudentData(prev => ({ ...prev, numberOfSiblings: parseInt(e.target.value) || 0 }))}
                     className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
                 </div>
               </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Classe *
-                </label>
-                <select
-                  value={formData.class}
-                  onChange={(e) => handleClassChange(e.target.value)}
-                  className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                    errors.class ? 'border-red-300' : 'border-gray-200'
-                  }`}
-                >
-                  <option value="">Sélectionner une classe</option>
-                  {classesWithFees.map(cls => (
-                    <option key={cls.name} value={cls.name}>
-                      {cls.name} ({cls.level}) - {cls.fees.toLocaleString()} FCFA/an
-                    </option>
-                  ))}
-                </select>
-                {errors.class && <p className="text-red-500 text-sm mt-1">{errors.class}</p>}
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Mode de Transport
-                  </label>
-                  <select
-                    value={formData.transportMode}
-                    onChange={(e) => setFormData(prev => ({ ...prev, transportMode: e.target.value as any }))}
-                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  >
-                    <option value="À pied">À pied</option>
-                    <option value="Transport scolaire">Transport scolaire</option>
-                    <option value="Transport familial">Transport familial</option>
-                    <option value="Transport public">Transport public</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Allergies Connues (Optionnel)
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.allergies || ''}
-                    onChange={(e) => setFormData(prev => ({ ...prev, allergies: e.target.value }))}
-                    placeholder="Allergies alimentaires, médicamenteuses..."
-                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Informations Médicales (Optionnel)
-                </label>
-                <textarea
-                  value={formData.medicalInfo || ''}
-                  onChange={(e) => setFormData(prev => ({ ...prev, medicalInfo: e.target.value }))}
-                  placeholder="Conditions médicales, traitements en cours, recommandations..."
-                  rows={3}
-                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
-
-              {formData.class && (
-                <div className="p-4 bg-blue-50 rounded-lg">
-                  <h4 className="font-medium text-blue-800 mb-2">Informations de la Classe</h4>
-                  <div className="text-sm text-blue-700 space-y-1">
-                    <p><strong>Classe:</strong> {formData.class}</p>
-                    <p><strong>Niveau:</strong> {formData.level}</p>
-                    <p><strong>Frais annuels:</strong> {formData.totalFees.toLocaleString()} FCFA</p>
-                  </div>
-                </div>
-              )}
             </div>
           )}
 
@@ -624,8 +552,8 @@ const AddStudentModal: React.FC<AddStudentModalProps> = ({
                   Type de Tuteur *
                 </label>
                 <select
-                  value={formData.guardianType}
-                  onChange={(e) => setFormData(prev => ({ ...prev, guardianType: e.target.value as any }))}
+                  value={studentData.guardianType}
+                  onChange={(e) => setStudentData(prev => ({ ...prev, guardianType: e.target.value as any }))}
                   className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 >
                   <option value="Parents">Parents</option>
@@ -645,8 +573,8 @@ const AddStudentModal: React.FC<AddStudentModalProps> = ({
                     </label>
                     <input
                       type="text"
-                      value={formData.fatherName}
-                      onChange={(e) => setFormData(prev => ({ ...prev, fatherName: e.target.value }))}
+                      value={studentData.fatherName}
+                      onChange={(e) => setStudentData(prev => ({ ...prev, fatherName: e.target.value }))}
                       className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     />
                   </div>
@@ -657,8 +585,8 @@ const AddStudentModal: React.FC<AddStudentModalProps> = ({
                     </label>
                     <input
                       type="tel"
-                      value={formData.fatherPhone}
-                      onChange={(e) => setFormData(prev => ({ ...prev, fatherPhone: e.target.value }))}
+                      value={studentData.fatherPhone}
+                      onChange={(e) => setStudentData(prev => ({ ...prev, fatherPhone: e.target.value }))}
                       placeholder="+223 XX XX XX XX"
                       className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     />
@@ -669,8 +597,8 @@ const AddStudentModal: React.FC<AddStudentModalProps> = ({
                       Profession
                     </label>
                     <select
-                      value={formData.fatherOccupation}
-                      onChange={(e) => setFormData(prev => ({ ...prev, fatherOccupation: e.target.value }))}
+                      value={studentData.fatherOccupation}
+                      onChange={(e) => setStudentData(prev => ({ ...prev, fatherOccupation: e.target.value }))}
                       className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     >
                       <option value="">Sélectionner une profession</option>
@@ -692,8 +620,8 @@ const AddStudentModal: React.FC<AddStudentModalProps> = ({
                     </label>
                     <input
                       type="text"
-                      value={formData.motherName}
-                      onChange={(e) => setFormData(prev => ({ ...prev, motherName: e.target.value }))}
+                      value={studentData.motherName}
+                      onChange={(e) => setStudentData(prev => ({ ...prev, motherName: e.target.value }))}
                       className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     />
                   </div>
@@ -704,8 +632,8 @@ const AddStudentModal: React.FC<AddStudentModalProps> = ({
                     </label>
                     <input
                       type="tel"
-                      value={formData.motherPhone}
-                      onChange={(e) => setFormData(prev => ({ ...prev, motherPhone: e.target.value }))}
+                      value={studentData.motherPhone}
+                      onChange={(e) => setStudentData(prev => ({ ...prev, motherPhone: e.target.value }))}
                       placeholder="+223 XX XX XX XX"
                       className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     />
@@ -716,8 +644,8 @@ const AddStudentModal: React.FC<AddStudentModalProps> = ({
                       Profession
                     </label>
                     <select
-                      value={formData.motherOccupation}
-                      onChange={(e) => setFormData(prev => ({ ...prev, motherOccupation: e.target.value }))}
+                      value={studentData.motherOccupation}
+                      onChange={(e) => setStudentData(prev => ({ ...prev, motherOccupation: e.target.value }))}
                       className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     >
                       <option value="">Sélectionner une profession</option>
@@ -741,21 +669,21 @@ const AddStudentModal: React.FC<AddStudentModalProps> = ({
               )}
 
               <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    <Mail className="h-4 w-4 inline mr-1" />
-                    Email Principal de Contact *
-                  </label>
-                  <input
-                    type="email"
-                    value={formData.parentEmail}
-                    onChange={(e) => setFormData(prev => ({ ...prev, parentEmail: e.target.value }))}
-                    placeholder="Email pour les communications officielles"
-                    className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                      errors.parentEmail ? 'border-red-300' : 'border-gray-200'
-                    }`}
-                  />
-                  {errors.parentEmail && <p className="text-red-500 text-sm mt-1">{errors.parentEmail}</p>}
-                </div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <Mail className="h-4 w-4 inline mr-1" />
+                  Email Principal de Contact *
+                </label>
+                <input
+                  type="email"
+                  value={studentData.parentEmail}
+                  onChange={(e) => setStudentData(prev => ({ ...prev, parentEmail: e.target.value }))}
+                  placeholder="Email pour les communications officielles"
+                  className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                    errors.parentEmail ? 'border-red-300' : 'border-gray-200'
+                  }`}
+                />
+                {errors.parentEmail && <p className="text-red-500 text-sm mt-1">{errors.parentEmail}</p>}
+              </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -763,8 +691,8 @@ const AddStudentModal: React.FC<AddStudentModalProps> = ({
                   Adresse Familiale *
                 </label>
                 <textarea
-                  value={formData.address}
-                  onChange={(e) => setFormData(prev => ({ ...prev, address: e.target.value }))}
+                  value={studentData.address}
+                  onChange={(e) => setStudentData(prev => ({ ...prev, address: e.target.value }))}
                   placeholder="Adresse complète : quartier, rue, ville, région"
                   rows={3}
                   className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
@@ -784,8 +712,8 @@ const AddStudentModal: React.FC<AddStudentModalProps> = ({
                     </label>
                     <input
                       type="text"
-                      value={formData.emergencyContactName}
-                      onChange={(e) => setFormData(prev => ({ ...prev, emergencyContactName: e.target.value }))}
+                      value={studentData.emergencyContactName}
+                      onChange={(e) => setStudentData(prev => ({ ...prev, emergencyContactName: e.target.value }))}
                       className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
                         errors.emergencyContactName ? 'border-red-300' : 'border-gray-200'
                       }`}
@@ -799,8 +727,8 @@ const AddStudentModal: React.FC<AddStudentModalProps> = ({
                     </label>
                     <input
                       type="tel"
-                      value={formData.emergencyContactPhone}
-                      onChange={(e) => setFormData(prev => ({ ...prev, emergencyContactPhone: e.target.value }))}
+                      value={studentData.emergencyContactPhone}
+                      onChange={(e) => setStudentData(prev => ({ ...prev, emergencyContactPhone: e.target.value }))}
                       placeholder="+223 XX XX XX XX"
                       className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
                         errors.emergencyContactPhone ? 'border-red-300' : 'border-gray-200'
@@ -815,8 +743,8 @@ const AddStudentModal: React.FC<AddStudentModalProps> = ({
                     </label>
                     <input
                       type="text"
-                      value={formData.emergencyContactRelation}
-                      onChange={(e) => setFormData(prev => ({ ...prev, emergencyContactRelation: e.target.value }))}
+                      value={studentData.emergencyContactRelation}
+                      onChange={(e) => setStudentData(prev => ({ ...prev, emergencyContactRelation: e.target.value }))}
                       placeholder="Ex: Oncle, Tante, Grand-mère..."
                       className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     />
@@ -829,13 +757,35 @@ const AddStudentModal: React.FC<AddStudentModalProps> = ({
           {/* Step 3: Financial Information */}
           {step === 'financial' && (
             <div className="space-y-6">
-              <div className="p-4 bg-gray-50 rounded-lg">
-                <h4 className="font-medium text-gray-800 mb-2">Frais de Scolarité</h4>
-                <div className="text-sm text-gray-700 space-y-1">
-                  <p><strong>Classe:</strong> {formData.class} ({formData.level})</p>
-                  <p><strong>Frais annuels:</strong> {formData.totalFees.toLocaleString()} FCFA</p>
-                </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Classe *
+                </label>
+                <select
+                  value={enrollmentData.classId}
+                  onChange={(e) => handleClassChange(e.target.value)}
+                  className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                    errors.classId ? 'border-red-300' : 'border-gray-200'
+                  }`}
+                >
+                  <option value="">Sélectionner une classe</option>
+                  {availableClasses.map(cls => (
+                    <option key={cls.id} value={cls.id}>
+                      {cls.name} ({cls.level}) - {cls.capacity - cls.current_students} places libres
+                    </option>
+                  ))}
+                </select>
+                {errors.classId && <p className="text-red-500 text-sm mt-1">{errors.classId}</p>}
               </div>
+
+              {enrollmentData.classId && (
+                <div className="p-4 bg-gray-50 rounded-lg">
+                  <h4 className="font-medium text-gray-800 mb-2">Frais de Scolarité</h4>
+                  <div className="text-sm text-gray-700 space-y-1">
+                    <p><strong>Frais annuels:</strong> {enrollmentData.totalFees.toLocaleString()} FCFA</p>
+                  </div>
+                </div>
+              )}
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -844,16 +794,16 @@ const AddStudentModal: React.FC<AddStudentModalProps> = ({
                 <input
                   type="number"
                   min="0"
-                  max={formData.totalFees}
-                  value={formData.initialPayment}
-                  onChange={(e) => setFormData(prev => ({ ...prev, initialPayment: parseInt(e.target.value) || 0 }))}
+                  max={enrollmentData.totalFees}
+                  value={enrollmentData.initialPayment}
+                  onChange={(e) => setEnrollmentData(prev => ({ ...prev, initialPayment: parseInt(e.target.value) || 0 }))}
                   className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
                     errors.initialPayment ? 'border-red-300' : 'border-gray-200'
                   }`}
                 />
                 {errors.initialPayment && <p className="text-red-500 text-sm mt-1">{errors.initialPayment}</p>}
                 <p className="text-sm text-gray-500 mt-1">
-                  Solde restant: {(formData.totalFees - formData.initialPayment).toLocaleString()} FCFA
+                  Solde restant: {(enrollmentData.totalFees - enrollmentData.initialPayment).toLocaleString()} FCFA
                 </p>
               </div>
 
@@ -869,12 +819,12 @@ const AddStudentModal: React.FC<AddStudentModalProps> = ({
                     { value: 'Virement Bancaire', label: 'Virement Bancaire', icon: BookOpen, color: 'purple' }
                   ].map(method => {
                     const Icon = method.icon;
-                    const isSelected = formData.paymentMethod === method.value;
+                    const isSelected = enrollmentData.paymentMethod === method.value;
                     
                     return (
                       <div
                         key={method.value}
-                        onClick={() => setFormData(prev => ({ ...prev, paymentMethod: method.value as any }))}
+                        onClick={() => setEnrollmentData(prev => ({ ...prev, paymentMethod: method.value as any }))}
                         className={`p-4 border-2 rounded-lg cursor-pointer transition-all ${
                           isSelected 
                             ? `border-${method.color}-500 bg-${method.color}-50` 
@@ -894,15 +844,15 @@ const AddStudentModal: React.FC<AddStudentModalProps> = ({
               </div>
 
               {/* Additional Fields based on Payment Method */}
-              {formData.paymentMethod === 'Mobile Money' && (
+              {enrollmentData.paymentMethod === 'Mobile Money' && (
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Numéro de Téléphone *
                   </label>
                   <input
                     type="tel"
-                    value={formData.mobileNumber || ''}
-                    onChange={(e) => setFormData(prev => ({ ...prev, mobileNumber: e.target.value }))}
+                    value={enrollmentData.mobileNumber || ''}
+                    onChange={(e) => setEnrollmentData(prev => ({ ...prev, mobileNumber: e.target.value }))}
                     placeholder="+223 XX XX XX XX"
                     className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
                       errors.mobileNumber ? 'border-red-300' : 'border-gray-200'
@@ -912,15 +862,15 @@ const AddStudentModal: React.FC<AddStudentModalProps> = ({
                 </div>
               )}
 
-              {formData.paymentMethod === 'Virement Bancaire' && (
+              {enrollmentData.paymentMethod === 'Virement Bancaire' && (
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Référence Bancaire *
                   </label>
                   <input
                     type="text"
-                    value={formData.bankDetails || ''}
-                    onChange={(e) => setFormData(prev => ({ ...prev, bankDetails: e.target.value }))}
+                    value={enrollmentData.bankDetails || ''}
+                    onChange={(e) => setEnrollmentData(prev => ({ ...prev, bankDetails: e.target.value }))}
                     placeholder="Numéro de référence ou RIB"
                     className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
                       errors.bankDetails ? 'border-red-300' : 'border-gray-200'
@@ -935,8 +885,8 @@ const AddStudentModal: React.FC<AddStudentModalProps> = ({
                   Notes (Optionnel)
                 </label>
                 <textarea
-                  value={formData.notes || ''}
-                  onChange={(e) => setFormData(prev => ({ ...prev, notes: e.target.value }))}
+                  value={enrollmentData.notes || ''}
+                  onChange={(e) => setEnrollmentData(prev => ({ ...prev, notes: e.target.value }))}
                   placeholder="Commentaires ou informations supplémentaires..."
                   rows={3}
                   className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -960,72 +910,46 @@ const AddStudentModal: React.FC<AddStudentModalProps> = ({
                 <div className="p-4 bg-gray-50 rounded-lg">
                   <h4 className="font-medium text-gray-800 mb-3">Informations de l'Élève</h4>
                   <div className="space-y-2 text-sm">
-                    <p><strong>Nom complet:</strong> {formData.firstName} {formData.lastName}</p>
-                    <p><strong>Sexe:</strong> {formData.gender}</p>
-                    <p><strong>Date de naissance:</strong> {new Date(formData.dateOfBirth).toLocaleDateString('fr-FR')}</p>
-                    <p><strong>Lieu de naissance:</strong> {formData.birthPlace}</p>
-                    <p><strong>Âge:</strong> {calculateAge(formData.dateOfBirth)} ans</p>
-                    <p><strong>Nationalité:</strong> {formData.nationality}</p>
-                    <p><strong>Langue maternelle:</strong> {formData.motherTongue}</p>
-                    <p><strong>Classe:</strong> {formData.class} ({formData.level})</p>
-                    <p><strong>Date d'inscription:</strong> {new Date(formData.enrollmentDate).toLocaleDateString('fr-FR')}</p>
-                    <p><strong>Année scolaire:</strong> {currentAcademicYear}</p>
-                    <p><strong>Transport:</strong> {formData.transportMode}</p>
-                    {formData.numberOfSiblings > 0 && (
-                      <p><strong>Frères/Sœurs:</strong> {formData.numberOfSiblings}</p>
-                    )}
+                    <p><strong>Nom complet:</strong> {studentData.firstName} {studentData.lastName}</p>
+                    <p><strong>Date de naissance:</strong> {new Date(studentData.dateOfBirth).toLocaleDateString('fr-FR')}</p>
+                    <p><strong>Âge:</strong> {calculateAge(studentData.dateOfBirth)} ans</p>
+                    <p><strong>Sexe:</strong> {studentData.gender}</p>
+                    <p><strong>Nationalité:</strong> {studentData.nationality}</p>
+                    <p><strong>Langue maternelle:</strong> {studentData.motherTongue}</p>
                   </div>
                 </div>
 
                 <div className="p-4 bg-blue-50 rounded-lg">
-                  <h4 className="font-medium text-blue-800 mb-3">Informations Familiales</h4>
-                  <div className="space-y-2 text-sm">
-                    <p><strong>Type de tuteur:</strong> {formData.guardianType}</p>
-                    {formData.fatherName && (
-                      <p><strong>Père:</strong> {formData.fatherName} {formData.fatherOccupation && `(${formData.fatherOccupation})`}</p>
+                  <h4 className="font-medium text-blue-800 mb-3">Contact Famille</h4>
+                  <div className="space-y-2 text-sm text-blue-700">
+                    <p><strong>Type de tuteur:</strong> {studentData.guardianType}</p>
+                    {studentData.fatherName && (
+                      <p><strong>Père:</strong> {studentData.fatherName}</p>
                     )}
-                    {formData.motherName && (
-                      <p><strong>Mère:</strong> {formData.motherName} {formData.motherOccupation && `(${formData.motherOccupation})`}</p>
+                    {studentData.motherName && (
+                      <p><strong>Mère:</strong> {studentData.motherName}</p>
                     )}
-                    <p><strong>Email principal:</strong> {formData.parentEmail}</p>
-                    <p><strong>Adresse:</strong> {formData.address}</p>
-                    <p><strong>Contact d'urgence:</strong> {formData.emergencyContactName} ({formData.emergencyContactRelation})</p>
+                    <p><strong>Email principal:</strong> {studentData.parentEmail}</p>
+                    <p><strong>Contact d'urgence:</strong> {studentData.emergencyContactName}</p>
                   </div>
                 </div>
               </div>
 
-              {/* Informations supplémentaires */}
-              {(formData.religion || formData.bloodType || formData.allergies || formData.medicalInfo || formData.previousSchool) && (
-                <div className="p-4 bg-yellow-50 rounded-lg">
-                  <h4 className="font-medium text-yellow-800 mb-3">Informations Complémentaires</h4>
-                  <div className="space-y-2 text-sm text-yellow-700">
-                    {formData.religion && <p><strong>Religion:</strong> {formData.religion}</p>}
-                    {formData.bloodType && <p><strong>Groupe sanguin:</strong> {formData.bloodType}</p>}
-                    {formData.previousSchool && <p><strong>École précédente:</strong> {formData.previousSchool}</p>}
-                    {formData.allergies && <p><strong>Allergies:</strong> {formData.allergies}</p>}
-                    {formData.medicalInfo && <p><strong>Infos médicales:</strong> {formData.medicalInfo}</p>}
+              <div className="p-4 bg-green-50 rounded-lg">
+                <h4 className="font-medium text-green-800 mb-3">Inscription</h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-green-700">
+                  <div>
+                    <p><strong>Année scolaire:</strong> {currentAcademicYear?.name}</p>
+                    <p><strong>Classe:</strong> {availableClasses.find(c => c.id === enrollmentData.classId)?.name}</p>
+                    <p><strong>Niveau:</strong> {availableClasses.find(c => c.id === enrollmentData.classId)?.level}</p>
+                  </div>
+                  <div>
+                    <p><strong>Frais annuels:</strong> {enrollmentData.totalFees.toLocaleString()} FCFA</p>
+                    <p><strong>Paiement initial:</strong> {enrollmentData.initialPayment.toLocaleString()} FCFA</p>
+                    <p><strong>Méthode:</strong> {enrollmentData.paymentMethod}</p>
                   </div>
                 </div>
-              )}
-
-              <div className="p-4 bg-blue-50 rounded-lg">
-                <h4 className="font-medium text-blue-800 mb-3">Situation Financière</h4>
-                <div className="space-y-2 text-sm text-blue-700">
-                  <p><strong>Frais annuels:</strong> {formData.totalFees.toLocaleString()} FCFA</p>
-                  <p><strong>Paiement initial:</strong> {formData.initialPayment.toLocaleString()} FCFA</p>
-                  <p><strong>Solde restant:</strong> {(formData.totalFees - formData.initialPayment).toLocaleString()} FCFA</p>
-                  <p><strong>Méthode de paiement:</strong> {formData.paymentMethod}</p>
-                  {formData.mobileNumber && <p><strong>Mobile Money:</strong> {formData.mobileNumber}</p>}
-                  {formData.bankDetails && <p><strong>Référence bancaire:</strong> {formData.bankDetails}</p>}
-                </div>
               </div>
-
-              {formData.notes && (
-                <div className="p-4 bg-gray-50 rounded-lg">
-                  <h4 className="font-medium text-gray-800 mb-2">Notes Administratives</h4>
-                  <p className="text-sm text-gray-700">{formData.notes}</p>
-                </div>
-              )}
             </div>
           )}
         </div>
