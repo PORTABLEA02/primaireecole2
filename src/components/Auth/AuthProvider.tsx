@@ -1,13 +1,17 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { User as SupabaseUser } from '@supabase/supabase-js';
+import { supabase } from '../../lib/supabase';
 import { User as UserType } from '../../types/User';
-
 
 interface AuthContextType {
   user: UserType | null;
+  supabaseUser: SupabaseUser | null;
   isAuthenticated: boolean;
+  loading: boolean;
   login: (email: string, password: string, rememberMe?: boolean) => Promise<boolean>;
   logout: () => void;
   hasPermission: (permission: string) => boolean;
+  error: string | null;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -26,103 +30,159 @@ interface AuthProviderProps {
 
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [user, setUser] = useState<UserType | null>(null);
+  const [supabaseUser, setSupabaseUser] = useState<SupabaseUser | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-
-  // Utilisateurs de démonstration
-  const users: Record<string, UserType> = {
-    'admin@ecoletech.edu': {
-      id: '1',
-      name: 'Admin Principal',
-      email: 'admin@ecoletech.edu',
-      role: 'Admin',
-      permissions: ['all'],
-      schoolId: 'ecole-1',
-      isActive: true,
-      createdDate: '2024-01-01'
-    },
-    'directeur@ecoletech.edu': {
-      id: '2',
-      name: 'Dr. Amadou Sanogo',
-      email: 'directeur@ecoletech.edu',
-      role: 'Directeur',
-      permissions: ['students', 'teachers', 'academic', 'reports', 'classes'],
-      schoolId: 'ecole-1',
-      isActive: true,
-      createdDate: '2024-01-01'
-    },
-    'secretaire@ecoletech.edu': {
-      id: '3',
-      name: 'Mme Fatoumata Keita',
-      email: 'secretaire@ecoletech.edu',
-      role: 'Secrétaire',
-      permissions: ['students', 'classes'],
-      schoolId: 'ecole-1',
-      isActive: true,
-      createdDate: '2024-01-01'
-    },
-    'comptable@ecoletech.edu': {
-      id: '4',
-      name: 'M. Ibrahim Coulibaly',
-      email: 'comptable@ecoletech.edu',
-      role: 'Comptable',
-      permissions: ['finance', 'reports'],
-      schoolId: 'ecole-1',
-      isActive: true,
-      createdDate: '2024-01-01'
-    }
-  };
-
-  const passwords: Record<string, string> = {
-    'admin@ecoletech.edu': 'admin123',
-    'directeur@ecoletech.edu': 'directeur123',
-    'secretaire@ecoletech.edu': 'secretaire123',
-    'comptable@ecoletech.edu': 'comptable123'
-  };
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    // Vérifier si l'utilisateur est déjà connecté (localStorage)
-    const savedUser = localStorage.getItem('ecoletech_user');
-    const savedAuth = localStorage.getItem('ecoletech_auth');
-    
-    if (savedUser && savedAuth === 'true') {
-      try {
-        const userData = JSON.parse(savedUser);
-        setUser(userData);
-        setIsAuthenticated(true);
-      } catch (error) {
-        // Nettoyer les données corrompues
-        localStorage.removeItem('ecoletech_user');
-        localStorage.removeItem('ecoletech_auth');
+    // Vérifier la session existante
+    checkSession();
+
+    // Écouter les changements d'authentification
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        if (event === 'SIGNED_IN' && session?.user) {
+          await loadUserProfile(session.user);
+        } else if (event === 'SIGNED_OUT') {
+          setUser(null);
+          setSupabaseUser(null);
+          setIsAuthenticated(false);
+        }
+        setLoading(false);
       }
-    }
+    );
+
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
-  const login = async (email: string, password: string, rememberMe: boolean = false): Promise<boolean> => {
-    // Vérification des identifiants
-    if (users[email] && passwords[email] === password) {
-      const userData = users[email];
-      setUser(userData);
-      setIsAuthenticated(true);
-
-      // Sauvegarder dans localStorage si "Se souvenir de moi" est coché
-      if (rememberMe) {
-        localStorage.setItem('ecoletech_user', JSON.stringify(userData));
-        localStorage.setItem('ecoletech_auth', 'true');
+  const checkSession = async () => {
+    try {
+      const { data: { session }, error } = await supabase.auth.getSession();
+      
+      if (error) throw error;
+      
+      if (session?.user) {
+        await loadUserProfile(session.user);
+      } else {
+        setLoading(false);
       }
-
-      return true;
+    } catch (error) {
+      console.error('Erreur de vérification de session:', error);
+      setError('Erreur de vérification de session');
+      setLoading(false);
     }
-
-    return false;
   };
 
-  const logout = () => {
-    setUser(null);
-    setIsAuthenticated(false);
-    
-    // Nettoyer localStorage
-    localStorage.removeItem('ecoletech_user');
-    localStorage.removeItem('ecoletech_auth');
+  const loadUserProfile = async (supabaseUser: SupabaseUser) => {
+    try {
+      const { data: profile, error } = await supabase
+        .from('user_profiles')
+        .select(`
+          *,
+          school:schools(*)
+        `)
+        .eq('id', supabaseUser.id)
+        .single();
+
+      if (error) {
+        console.error('Erreur lors du chargement du profil:', error);
+        setError('Profil utilisateur non trouvé');
+        return;
+      }
+
+      // Mapper vers notre type User
+      const userData: UserType = {
+        id: profile.id,
+        name: profile.name,
+        email: profile.email,
+        role: profile.role,
+        permissions: profile.permissions || [],
+        schoolId: profile.school_id,
+        isActive: profile.is_active,
+        createdDate: profile.created_at,
+        lastLogin: profile.last_login
+      };
+
+      setUser(userData);
+      setSupabaseUser(supabaseUser);
+      setIsAuthenticated(true);
+      setError(null);
+
+      // Mettre à jour la dernière connexion
+      await supabase
+        .from('user_profiles')
+        .update({ last_login: new Date().toISOString() })
+        .eq('id', supabaseUser.id);
+
+    } catch (error) {
+      console.error('Erreur lors du chargement du profil:', error);
+      setError('Erreur lors du chargement du profil utilisateur');
+    }
+  };
+
+  const login = async (email: string, password: string, rememberMe: boolean = false): Promise<boolean> => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password
+      });
+
+      if (error) {
+        console.error('Erreur de connexion:', error);
+        
+        // Messages d'erreur personnalisés
+        if (error.message.includes('Invalid login credentials')) {
+          setError('Email ou mot de passe incorrect');
+        } else if (error.message.includes('Email not confirmed')) {
+          setError('Veuillez confirmer votre email avant de vous connecter');
+        } else {
+          setError(error.message);
+        }
+        
+        return false;
+      }
+
+      if (data.user) {
+        await loadUserProfile(data.user);
+        return true;
+      }
+
+      return false;
+    } catch (error: any) {
+      console.error('Erreur lors de la connexion:', error);
+      setError(error.message || 'Erreur de connexion');
+      return false;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const logout = async () => {
+    try {
+      setLoading(true);
+      
+      const { error } = await supabase.auth.signOut();
+      
+      if (error) {
+        console.error('Erreur de déconnexion:', error);
+        setError('Erreur lors de la déconnexion');
+      }
+
+      setUser(null);
+      setSupabaseUser(null);
+      setIsAuthenticated(false);
+    } catch (error: any) {
+      console.error('Erreur lors de la déconnexion:', error);
+      setError(error.message || 'Erreur de déconnexion');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const hasPermission = (permission: string): boolean => {
@@ -133,10 +193,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const value: AuthContextType = {
     user,
+    supabaseUser,
     isAuthenticated,
+    loading,
     login,
     logout,
-    hasPermission
+    hasPermission,
+    error
   };
 
   return (

@@ -36,12 +36,7 @@ const AppContent: React.FC = () => {
   }, []);
 
   const handleLogin = async (credentials: { email: string; password: string; rememberMe: boolean }) => {
-    const success = await login(credentials.email, credentials.password, credentials.rememberMe);
-    if (!success) {
-      // L'erreur sera gérée par le composant LoginPage
-      return false;
-    }
-    return true;
+    return await login(credentials.email, credentials.password, credentials.rememberMe);
   };
 
   if (!isAuthenticated) {

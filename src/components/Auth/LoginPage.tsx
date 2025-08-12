@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { Eye, EyeOff, School, Mail, Lock, AlertCircle, CheckCircle, Loader } from 'lucide-react';
+import { Eye, EyeOff, School, Mail, Lock, AlertCircle, Loader, Database } from 'lucide-react';
+import { useAuth } from './AuthProvider';
 
 interface LoginPageProps {
-  onLogin: (credentials: LoginCredentials) => void;
+  onLogin: (credentials: LoginCredentials) => Promise<boolean>;
 }
 
 interface LoginCredentials {
@@ -12,6 +13,7 @@ interface LoginCredentials {
 }
 
 const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
+  const { error: authError, loading: authLoading } = useAuth();
   const [formData, setFormData] = useState({
     email: '',
     password: '',
@@ -19,54 +21,50 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
   });
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [localError, setLocalError] = useState('');
   const [showForgotPassword, setShowForgotPassword] = useState(false);
 
-  // Comptes de démonstration
-  const demoAccounts = [
-    { email: 'admin@ecoletech.edu', password: 'admin123', role: 'Administrateur' },
-    { email: 'directeur@ecoletech.edu', password: 'directeur123', role: 'Directeur' },
-    { email: 'secretaire@ecoletech.edu', password: 'secretaire123', role: 'Secrétaire' },
-    { email: 'comptable@ecoletech.edu', password: 'comptable123', role: 'Comptable' }
+  // Comptes de test (pour information uniquement)
+  const testAccounts = [
+    { email: 'admin@ecoletech.edu', role: 'Administrateur', description: 'Accès complet au système' },
+    { email: 'directeur@ecoletech.edu', role: 'Directeur', description: 'Gestion de l\'école' },
+    { email: 'secretaire@ecoletech.edu', role: 'Secrétaire', description: 'Gestion des élèves' },
+    { email: 'comptable@ecoletech.edu', role: 'Comptable', description: 'Gestion financière' }
   ];
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
+    setLocalError('');
     setIsLoading(true);
 
     // Validation
     if (!formData.email || !formData.password) {
-      setError('Veuillez remplir tous les champs');
+      setLocalError('Veuillez remplir tous les champs');
       setIsLoading(false);
       return;
     }
 
-    // Simulation de l'authentification
-    await new Promise(resolve => setTimeout(resolve, 1500));
-
-    // Vérification des identifiants
-    const account = demoAccounts.find(acc => 
-      acc.email === formData.email && acc.password === formData.password
-    );
-
-    if (account) {
-      onLogin({
+    try {
+      const success = await onLogin({
         email: formData.email,
         password: formData.password,
         rememberMe: formData.rememberMe
       });
-    } else {
-      setError('Email ou mot de passe incorrect');
+
+      if (!success) {
+        setLocalError('Échec de la connexion');
+      }
+    } catch (error: any) {
+      setLocalError(error.message || 'Erreur de connexion');
     }
 
     setIsLoading(false);
   };
 
-  const handleDemoLogin = (account: typeof demoAccounts[0]) => {
+  const handleTestLogin = (account: typeof testAccounts[0]) => {
     setFormData({
       email: account.email,
-      password: account.password,
+      password: '', // L'utilisateur doit saisir le mot de passe
       rememberMe: false
     });
   };
@@ -170,10 +168,10 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
 
             <button
               type="submit"
-              disabled={isLoading}
+              disabled={isLoading || authLoading}
               className="w-full py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
             >
-              {isLoading ? (
+              {(isLoading || authLoading) ? (
                 <>
                   <Loader className="h-5 w-5 animate-spin" />
                   <span>Connexion en cours...</span>
@@ -184,26 +182,36 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
             </button>
           </form>
 
-          {/* Comptes de démonstration */}
+          {/* Comptes de test */}
           <div className="mt-8 pt-6 border-t border-gray-200">
-            <h3 className="text-sm font-medium text-gray-700 mb-4">Comptes de Démonstration</h3>
+            <div className="flex items-center space-x-2 mb-4">
+              <Database className="h-4 w-4 text-blue-600" />
+              <h3 className="text-sm font-medium text-gray-700">Comptes de Test (Base de Données)</h3>
+            </div>
             <div className="grid grid-cols-1 gap-2">
-              {demoAccounts.map((account, index) => (
+              {testAccounts.map((account, index) => (
                 <button
                   key={index}
-                  onClick={() => handleDemoLogin(account)}
-                  disabled={isLoading}
+                  onClick={() => handleTestLogin(account)}
+                  disabled={isLoading || authLoading}
                   className="w-full p-3 text-left border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
                 >
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-sm font-medium text-gray-800">{account.role}</p>
                       <p className="text-xs text-gray-500">{account.email}</p>
+                      <p className="text-xs text-gray-400">{account.description}</p>
                     </div>
-                    <span className="text-xs text-blue-600 font-medium">Tester</span>
+                    <span className="text-xs text-blue-600 font-medium">Utiliser</span>
                   </div>
                 </button>
               ))}
+            </div>
+            <div className="mt-3 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+              <p className="text-xs text-yellow-700">
+                <strong>Note:</strong> Ces comptes utilisent la base de données Supabase. 
+                Vous devez saisir le mot de passe configuré dans la base de données.
+              </p>
             </div>
           </div>
         </div>
@@ -216,10 +224,10 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
         </div>
 
         {/* Modal Mot de passe oublié */}
-        {showForgotPassword && (
+        {(localError || authError) && (
           <ForgotPasswordModal
             onClose={() => setShowForgotPassword(false)}
-            onSubmit={handleForgotPassword}
+            <p className="text-red-700 text-sm">{localError || authError}</p>
           />
         )}
       </div>
