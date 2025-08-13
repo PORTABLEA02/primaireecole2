@@ -13,7 +13,6 @@ interface StudentFiltersProps {
   availableClasses: string[];
   onRefresh: () => void;
   onExport: () => void;
-  loading?: boolean;
 }
 
 const StudentFilters: React.FC<StudentFiltersProps> = ({
@@ -28,7 +27,6 @@ const StudentFilters: React.FC<StudentFiltersProps> = ({
   availableClasses,
   onRefresh,
   onExport,
-  loading = false
 }) => {
   return (
     <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
@@ -81,10 +79,9 @@ const StudentFilters: React.FC<StudentFiltersProps> = ({
           
           <button 
             onClick={onRefresh}
-            disabled={loading}
-            className="px-4 py-2 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors flex items-center space-x-2 disabled:opacity-50"
+            className="px-4 py-2 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors flex items-center space-x-2"
           >
-            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+            <RefreshCw className="h-4 w-4" />
             <span>Actualiser</span>
           </button>
 

@@ -147,6 +147,25 @@ export class PaymentService {
     }
   }
 
+  // Obtenir une méthode de paiement par nom
+  static async getPaymentMethodByName(schoolId: string, methodName: string) {
+    try {
+      const { data, error } = await supabase
+        .from('payment_methods')
+        .select('*')
+        .eq('school_id', schoolId)
+        .eq('name', methodName)
+        .eq('is_enabled', true)
+        .single();
+
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      console.error('Erreur lors du chargement de la méthode de paiement:', error);
+      return null;
+    }
+  }
+
   // Créer une méthode de paiement
   static async createPaymentMethod(methodData: {
     schoolId: string;

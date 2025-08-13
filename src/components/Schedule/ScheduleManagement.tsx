@@ -273,7 +273,7 @@ const ScheduleManagement: React.FC = () => {
         
         <div className="mt-4 p-3 bg-blue-50 rounded-lg">
           <p className="text-sm text-blue-800">
-            <strong>Système Béninois:</strong> Un seul enseignant par classe assure toutes les matières. 
+            <strong>Système Éducatif Béninois:</strong> Un seul enseignant par classe assure toutes les matières. 
             L'emploi du temps organise les matières par créneaux horaires.
           </p>
         </div>

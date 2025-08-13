@@ -30,7 +30,6 @@ export const SupabaseProvider: React.FC<SupabaseProviderProps> = ({ children }) 
   const [userProfile, setUserProfile] = useState<any>(null);
   const [currentSchool, setCurrentSchool] = useState<any>(null);
   const [currentAcademicYear, setCurrentAcademicYear] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (isAuthenticated && user) {
@@ -39,13 +38,11 @@ export const SupabaseProvider: React.FC<SupabaseProviderProps> = ({ children }) 
       setUserProfile(null);
       setCurrentSchool(null);
       setCurrentAcademicYear(null);
-      setLoading(false);
     }
   }, [isAuthenticated, user]);
 
   const loadUserData = async () => {
     try {
-      setLoading(true);
 
       // Charger le profil utilisateur avec l'école
       const { data: profile, error: profileError } = await supabase
@@ -97,7 +94,6 @@ export const SupabaseProvider: React.FC<SupabaseProviderProps> = ({ children }) 
     } catch (error) {
       console.error('Erreur lors du chargement des données utilisateur:', error);
     } finally {
-      setLoading(false);
     }
   };
 
@@ -138,7 +134,6 @@ export const SupabaseProvider: React.FC<SupabaseProviderProps> = ({ children }) 
     userProfile,
     currentSchool,
     currentAcademicYear,
-    loading,
     refreshData,
     logActivity
   };

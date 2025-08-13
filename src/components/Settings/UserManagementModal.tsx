@@ -14,6 +14,11 @@ interface User {
   status: 'Actif' | 'Inactif';
   lastLogin?: string;
   permissions: string[];
+  linkedTeacher?: {
+    id: string;
+    name: string;
+    assignedClass?: string;
+  };
 }
 
 const UserManagementModal: React.FC<UserManagementModalProps> = ({
@@ -291,6 +296,12 @@ const UserManagementModal: React.FC<UserManagementModalProps> = ({
                       <div>
                         <p className="font-medium text-gray-800">{user.name}</p>
                         <p className="text-sm text-gray-500">{user.email}</p>
+                        {user.linkedTeacher && (
+                          <p className="text-xs text-blue-600 mt-1">
+                            Enseignant: {user.linkedTeacher.name}
+                            {user.linkedTeacher.assignedClass && ` (${user.linkedTeacher.assignedClass})`}
+                          </p>
+                        )}
                       </div>
                     </td>
                     

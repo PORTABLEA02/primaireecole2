@@ -9,7 +9,9 @@ export class ClassService {
         .select(`
           *,
           teacher_assignment:teacher_class_assignments!left(
-            teacher:teachers(first_name, last_name, email)
+            teacher:teachers(first_name, last_name, email),
+            salary_amount,
+            is_active
           ),
           classroom_assignment:classroom_class_assignments!left(
             classroom:classrooms(name, capacity)
@@ -100,7 +102,7 @@ export class ClassService {
   }
 
   // Obtenir les statistiques d'une classe
-  static async getClassStats(classId: string, academicYearId: string) {
+  static async getClassStats(classId: string, gradePeriodId: string) {
     try {
       const { data, error } = await supabase
         .rpc('get_class_academic_stats', {

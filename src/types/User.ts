@@ -13,6 +13,7 @@ export interface User {
 
 export interface Teacher {
   id: string;
+  userProfileId?: string; // ID du profil utilisateur lié
   firstName: string;
   lastName: string;
   email: string;
@@ -30,6 +31,7 @@ export interface Teacher {
   performanceRating: number;
   schoolId: string; // Nouvelle propriété
   academicYear: string; // Année scolaire
+  hasUserAccount?: boolean; // Indique si l'enseignant a un compte utilisateur
 }
 
 export interface Student {

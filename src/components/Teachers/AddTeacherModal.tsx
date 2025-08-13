@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
 import { X, UserCheck, User, Mail, Phone, MapPin, Calendar, Award, BookOpen } from 'lucide-react';
+import { useAuth } from '../Auth/AuthProvider';
+import { ClassService } from '../../services/classService';
 
 interface AddTeacherModalProps {
   isOpen: boolean;
   onClose: () => void;
   onAddTeacher: (teacherData: NewTeacherData) => void;
-  availableClasses: string[];
+  availableClasses?: string[];
 }
 
 interface NewTeacherData {
@@ -22,14 +24,21 @@ interface NewTeacherData {
   hireDate: string;
   emergencyContact: string;
   subjects: string[];
+  createUserAccount: boolean;
+  password?: string;
+  permissions?: string[];
 }
 
 const AddTeacherModal: React.FC<AddTeacherModalProps> = ({
   isOpen,
   onClose,
   onAddTeacher,
-  availableClasses
+  availableClasses = []
 }) => {
+  const { userSchool, currentAcademicYear } = useAuth();
+  const [availableClassesData, setAvailableClassesData] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+
   const [formData, setFormData] = useState<NewTeacherData>({
     firstName: '',
     lastName: '',
@@ -43,10 +52,37 @@ const AddTeacherModal: React.FC<AddTeacherModalProps> = ({
     salary: 150000,
     hireDate: new Date().toISOString().split('T')[0],
     emergencyContact: '',
-    subjects: []
+    subjects: [],
+    createUserAccount: false,
+    password: '',
+    permissions: []
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
+
+  // Charger les classes disponibles
+  React.useEffect(() => {
+    if (isOpen && userSchool && currentAcademicYear) {
+      loadAvailableClasses();
+    }
+  }, [isOpen, userSchool, currentAcademicYear]);
+
+  const loadAvailableClasses = async () => {
+    if (!userSchool || !currentAcademicYear) return;
+
+    try {
+      setLoading(true);
+      const classes = await ClassService.getClasses(userSchool.id, currentAcademicYear.id);
+      
+      // Filtrer les classes sans enseignant
+      const classesWithoutTeacher = classes.filter(cls => !cls.teacher_assignment || cls.teacher_assignment.length === 0);
+      setAvailableClassesData(classesWithoutTeacher);
+    } catch (error) {
+      console.error('Erreur lors du chargement des classes:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const qualifications = [
     'CAP Petite Enfance',
@@ -119,6 +155,15 @@ const AddTeacherModal: React.FC<AddTeacherModalProps> = ({
       newErrors.emergencyContact = 'Le contact d\'urgence est requis';
     }
 
+    if (formData.createUserAccount) {
+      if (!formData.password || formData.password.length < 8) {
+        newErrors.password = 'Le mot de passe doit contenir au moins 8 caractères';
+      }
+      if (!formData.permissions || formData.permissions.length === 0) {
+        newErrors.permissions = 'Au moins une permission doit être accordée';
+      }
+    }
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -146,7 +191,10 @@ const AddTeacherModal: React.FC<AddTeacherModalProps> = ({
       salary: 150000,
       hireDate: new Date().toISOString().split('T')[0],
       emergencyContact: '',
-      subjects: []
+      subjects: [],
+      createUserAccount: false,
+      password: '',
+      permissions: []
     });
     setErrors({});
     onClose();
@@ -169,15 +217,9 @@ const AddTeacherModal: React.FC<AddTeacherModalProps> = ({
         subjects: []
       }));
     } else {
-      // Déterminer le niveau à partir du nom de la classe
-      let level = '';
-      if (className.includes('Maternelle')) level = 'Maternelle';
-      else if (className.includes('CI')) level = 'CI';
-      else if (className.includes('CP')) level = 'CP';
-      else if (className.includes('CE1')) level = 'CE1';
-      else if (className.includes('CE2')) level = 'CE2';
-      else if (className.includes('CM1')) level = 'CM1';
-      else if (className.includes('CM2')) level = 'CM2';
+      // Trouver la classe sélectionnée
+      const selectedClass = availableClassesData.find(cls => cls.name === className);
+      const level = selectedClass?.level || '';
 
       const subjects = subjectsByLevel[level as keyof typeof subjectsByLevel] || [];
 
@@ -282,7 +324,7 @@ const AddTeacherModal: React.FC<AddTeacherModalProps> = ({
                   type="tel"
                   value={formData.phone}
                   onChange={(e) => setFormData(prev => ({ ...prev, phone: e.target.value }))}
-                  placeholder="+223 XX XX XX XX"
+                  placeholder="+229 01 XX XX XX XX"
                   className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
                     errors.phone ? 'border-red-300' : 'border-gray-200'
                   }`}
@@ -312,7 +354,7 @@ const AddTeacherModal: React.FC<AddTeacherModalProps> = ({
                 type="tel"
                 value={formData.emergencyContact}
                 onChange={(e) => setFormData(prev => ({ ...prev, emergencyContact: e.target.value }))}
-                placeholder="+223 XX XX XX XX"
+                placeholder="+229 01 XX XX XX XX"
                 className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
                   errors.emergencyContact ? 'border-red-300' : 'border-gray-200'
                 }`}
@@ -433,13 +475,26 @@ const AddTeacherModal: React.FC<AddTeacherModalProps> = ({
               <select
                 value={formData.assignedClass || ''}
                 onChange={(e) => handleClassAssignment(e.target.value)}
+                disabled={loading}
                 className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               >
                 <option value="">Aucune classe (Enseignant disponible)</option>
-                {availableClasses.map(className => (
-                  <option key={className} value={className}>{className}</option>
+                {availableClassesData.map(cls => (
+                  <option key={cls.id} value={cls.name}>
+                    {cls.name}
+                  </option>
                 ))}
               </select>
+              
+              {loading && (
+                <p className="text-sm text-gray-500 mt-1">Chargement des classes disponibles...</p>
+              )}
+              
+              {!loading && availableClassesData.length === 0 && (
+                <p className="text-sm text-yellow-600 mt-1">
+                  Aucune classe disponible - Toutes les classes ont déjà un enseignant assigné
+                </p>
+              )}
             </div>
 
             {formData.assignedClass && formData.subjects.length > 0 && (
@@ -456,6 +511,91 @@ const AddTeacherModal: React.FC<AddTeacherModalProps> = ({
             )}
           </div>
 
+          {/* Compte utilisateur */}
+          <div className="space-y-4">
+            <h3 className="text-lg font-semibold text-gray-800 flex items-center space-x-2">
+              <User className="h-5 w-5" />
+              <span>Compte Utilisateur (Optionnel)</span>
+            </h3>
+            
+            <div className="p-4 bg-gray-50 rounded-lg">
+              <label className="flex items-center space-x-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={formData.createUserAccount}
+                  onChange={(e) => setFormData(prev => ({ 
+                    ...prev, 
+                    createUserAccount: e.target.checked,
+                    permissions: e.target.checked ? ['academic'] : []
+                  }))}
+                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                />
+                <div>
+                  <span className="font-medium text-gray-800">Créer un compte utilisateur</span>
+                  <p className="text-sm text-gray-600">
+                    Permet à l'enseignant de se connecter au système pour saisir des notes
+                  </p>
+                </div>
+              </label>
+            </div>
+
+            {formData.createUserAccount && (
+              <div className="space-y-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Mot de Passe *
+                  </label>
+                  <input
+                    type="password"
+                    value={formData.password}
+                    onChange={(e) => setFormData(prev => ({ ...prev, password: e.target.value }))}
+                    placeholder="Minimum 8 caractères"
+                    className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                      errors.password ? 'border-red-300' : 'border-gray-200'
+                    }`}
+                  />
+                  {errors.password && <p className="text-red-500 text-sm mt-1">{errors.password}</p>}
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Permissions *
+                  </label>
+                  <div className="space-y-2">
+                    {[
+                      { id: 'academic', label: 'Gestion académique (notes, bulletins)' },
+                      { id: 'students', label: 'Consultation des élèves' },
+                      { id: 'schedule', label: 'Consultation emploi du temps' }
+                    ].map(permission => (
+                      <label key={permission.id} className="flex items-center space-x-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={formData.permissions?.includes(permission.id) || false}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setFormData(prev => ({ 
+                                ...prev, 
+                                permissions: [...(prev.permissions || []), permission.id] 
+                              }));
+                            } else {
+                              setFormData(prev => ({ 
+                                ...prev, 
+                                permissions: (prev.permissions || []).filter(p => p !== permission.id) 
+                              }));
+                            }
+                          }}
+                          className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                        />
+                        <span className="text-sm text-gray-700">{permission.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                  {errors.permissions && <p className="text-red-500 text-sm mt-1">{errors.permissions}</p>}
+                </div>
+              </div>
+            )}
+          </div>
+
           {/* Summary */}
           {formData.firstName && formData.lastName && (
             <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
@@ -466,8 +606,12 @@ const AddTeacherModal: React.FC<AddTeacherModalProps> = ({
                 <p><strong>Expérience:</strong> {formData.experience}</p>
                 <p><strong>Classe assignée:</strong> {formData.assignedClass || 'Aucune (Disponible)'}</p>
                 <p><strong>Salaire:</strong> {formData.salary.toLocaleString()} FCFA</p>
+                <p><strong>Compte utilisateur:</strong> {formData.createUserAccount ? 'Oui' : 'Non'}</p>
                 {formData.specializations.length > 0 && (
                   <p><strong>Spécialisations:</strong> {formData.specializations.join(', ')}</p>
+                )}
+                {formData.createUserAccount && formData.permissions && formData.permissions.length > 0 && (
+                  <p><strong>Permissions:</strong> {formData.permissions.join(', ')}</p>
                 )}
               </div>
             </div>

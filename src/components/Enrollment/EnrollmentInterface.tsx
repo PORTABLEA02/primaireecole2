@@ -15,6 +15,8 @@ interface EnrollmentData {
   className: string;
   enrollmentDate: string;
   isNewStudent: boolean;
+  paymentType: 'Inscription' | 'Scolarité';
+  initialPayment: number;
 }
 
 interface ClassOption {
@@ -53,7 +55,9 @@ const EnrollmentInterface: React.FC = () => {
     classId: '',
     className: '',
     enrollmentDate: new Date().toISOString().split('T')[0],
-    isNewStudent: true
+    isNewStudent: true,
+    paymentType: 'Inscription',
+    initialPayment: 0
   });
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedStudent, setSelectedStudent] = useState<ExistingStudent | null>(null);
@@ -135,7 +139,7 @@ const EnrollmentInterface: React.FC = () => {
       dateOfBirth: '2013-05-15',
       gender: 'Masculin',
       parentName: 'M. Kwame Mensah',
-      parentPhone: '+223 70 11 22 33',
+      parentPhone: '+229 70 11 22 33',
       parentEmail: 'mensah.family@email.com',
       currentClass: 'CM1A'
     },
@@ -146,7 +150,7 @@ const EnrollmentInterface: React.FC = () => {
       dateOfBirth: '2014-08-22',
       gender: 'Féminin',
       parentName: 'Mme Fatoumata Traore',
-      parentPhone: '+223 75 44 55 66',
+      parentPhone: '+229 75 44 55 66',
       parentEmail: 'traore.aminata@email.com',
       currentClass: 'CE2A'
     },
@@ -157,7 +161,7 @@ const EnrollmentInterface: React.FC = () => {
       dateOfBirth: '2015-03-10',
       gender: 'Masculin',
       parentName: 'M. Sekou Kone',
-      parentPhone: '+223 65 77 88 99',
+      parentPhone: '+229 65 77 88 99',
       parentEmail: 'kone.ibrahim@email.com',
       currentClass: 'CE1B'
     }
@@ -237,7 +241,9 @@ const EnrollmentInterface: React.FC = () => {
       gender: 'Masculin',
       parentName: '',
       parentPhone: '',
-      parentEmail: ''
+      parentEmail: '',
+      paymentType: 'Inscription',
+      initialPayment: 0
     }));
     setSelectedStudent(null);
     setErrors({});
@@ -274,7 +280,10 @@ const EnrollmentInterface: React.FC = () => {
       
       // Simulation de l'inscription
       setTimeout(() => {
-        alert(`Inscription réussie ! ${enrollmentData.firstName} ${enrollmentData.lastName} a été inscrit(e) en ${enrollmentData.className} pour l'année ${currentAcademicYear}.`);
+        const paymentMessage = enrollmentData.initialPayment > 0 
+          ? ` avec un paiement ${enrollmentData.paymentType.toLowerCase()} de ${enrollmentData.initialPayment.toLocaleString()} FCFA`
+          : ' sans paiement initial';
+        alert(`Inscription réussie ! ${enrollmentData.firstName} ${enrollmentData.lastName} a été inscrit(e) en ${enrollmentData.className}${paymentMessage}.`);
         handleReset();
       }, 1000);
     }
@@ -293,7 +302,9 @@ const EnrollmentInterface: React.FC = () => {
       classId: '',
       className: '',
       enrollmentDate: new Date().toISOString().split('T')[0],
-      isNewStudent: true
+      isNewStudent: true,
+      paymentType: 'Inscription',
+      initialPayment: 0
     });
     setSelectedStudent(null);
     setErrors({});
@@ -484,7 +495,7 @@ const EnrollmentInterface: React.FC = () => {
                       type="tel"
                       value={enrollmentData.parentPhone}
                       onChange={(e) => setEnrollmentData(prev => ({ ...prev, parentPhone: e.target.value }))}
-                      placeholder="+223 XX XX XX XX"
+                      placeholder="+229 01 XX XX XX XX"
                       className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
                         errors.parentPhone ? 'border-red-300' : 'border-gray-200'
                       }`}

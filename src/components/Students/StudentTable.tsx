@@ -19,7 +19,6 @@ interface StudentTableProps {
   onEditStudent: (student: any) => void;
   onTransferStudent: (student: any) => void;
   onWithdrawStudent: (student: any) => void;
-  loading?: boolean;
 }
 
 const StudentTable: React.FC<StudentTableProps> = ({
@@ -28,7 +27,6 @@ const StudentTable: React.FC<StudentTableProps> = ({
   onEditStudent,
   onTransferStudent,
   onWithdrawStudent,
-  loading = false
 }) => {
   const getStatusColor = (isActive: boolean) => {
     return isActive 
@@ -40,20 +38,6 @@ const StudentTable: React.FC<StudentTableProps> = ({
     const display = StudentHelpers.getPaymentStatusDisplay(status);
     return display.className;
   };
-
-  if (loading) {
-    return (
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100">
-        <div className="p-6 border-b border-gray-100">
-          <h2 className="text-lg font-semibold text-gray-800">Liste des Élèves</h2>
-        </div>
-        <div className="p-12 text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Chargement des élèves...</p>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">

@@ -34,7 +34,6 @@ const TransferStudentModal: React.FC<TransferStudentModalProps> = ({
   const [availableClasses, setAvailableClasses] = useState<AvailableClass[]>([]);
   const [selectedClass, setSelectedClass] = useState<AvailableClass | null>(null);
   const [transferReason, setTransferReason] = useState('');
-  const [loading, setLoading] = useState(false);
   const [step, setStep] = useState<'select' | 'confirm'>('select');
 
   useEffect(() => {
@@ -47,19 +46,19 @@ const TransferStudentModal: React.FC<TransferStudentModalProps> = ({
     if (!userSchool || !currentAcademicYear) return;
 
     try {
-      setLoading(true);
       const classes = await StudentService.getAvailableClassesForEnrollment(
         userSchool.id, 
         currentAcademicYear.id
       );
       
       // Exclure la classe actuelle de l'élève
-      const filteredClasses = classes.filter(cls => cls.name !== student.class_name);
+      const filteredClasses = classes.filter(cls => 
+        cls.name !== student.class_name && cls.current_students < cls.capacity
+      );
       setAvailableClasses(filteredClasses);
     } catch (error) {
       console.error('Erreur lors du chargement des classes:', error);
     } finally {
-      setLoading(false);
     }
   };
 
@@ -67,7 +66,6 @@ const TransferStudentModal: React.FC<TransferStudentModalProps> = ({
     if (!selectedClass || !student) return;
 
     try {
-      setLoading(true);
       
       await StudentService.transferStudent(
         student.id, // enrollment ID
@@ -82,7 +80,6 @@ const TransferStudentModal: React.FC<TransferStudentModalProps> = ({
       console.error('Erreur lors du transfert:', error);
       alert(`Erreur: ${error.message}`);
     } finally {
-      setLoading(false);
     }
   };
 
@@ -150,12 +147,7 @@ const TransferStudentModal: React.FC<TransferStudentModalProps> = ({
               <div className="space-y-4">
                 <h3 className="text-lg font-semibold text-gray-800">Classes Disponibles</h3>
                 
-                {loading ? (
-                  <div className="text-center py-8">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
-                    <p className="text-gray-600 mt-2">Chargement des classes...</p>
-                  </div>
-                ) : availableClasses.length > 0 ? (
+                {availableClasses.length > 0 ? (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {availableClasses.map((cls) => {
                       const isFull = isClassFull(cls);
@@ -363,20 +355,10 @@ const TransferStudentModal: React.FC<TransferStudentModalProps> = ({
               {step === 'confirm' && selectedClass && (
                 <button
                   onClick={handleTransfer}
-                  disabled={loading}
-                  className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
+                  className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center space-x-2"
                 >
-                  {loading ? (
-                    <>
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                      <span>Transfert...</span>
-                    </>
-                  ) : (
-                    <>
-                      <CheckCircle className="h-4 w-4" />
-                      <span>Confirmer le Transfert</span>
-                    </>
-                  )}
+                  <CheckCircle className="h-4 w-4" />
+                  <span>Confirmer le Transfert</span>
                 </button>
               )}
             </div>

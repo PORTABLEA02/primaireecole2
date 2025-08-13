@@ -13,7 +13,7 @@ interface LoginCredentials {
 }
 
 const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
-  const { error: authError, loading: authLoading } = useAuth();
+  const { error: authError } = useAuth();
   const [formData, setFormData] = useState({
     email: '',
     password: '',
@@ -168,10 +168,10 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
 
             <button
               type="submit"
-              disabled={isLoading || authLoading}
+              disabled={isLoading}
               className="w-full py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
             >
-              {(isLoading || authLoading) ? (
+              {isLoading ? (
                 <>
                   <Loader className="h-5 w-5 animate-spin" />
                   <span>Connexion en cours...</span>
@@ -193,7 +193,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
                 <button
                   key={index}
                   onClick={() => handleTestLogin(account)}
-                  disabled={isLoading || authLoading}
+                  disabled={isLoading}
                   className="w-full p-3 text-left border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
                 >
                   <div className="flex items-center justify-between">
@@ -219,7 +219,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
         {/* Footer */}
         <div className="text-center mt-8">
           <p className="text-sm text-gray-500">
-            © 2024 EcoleTech. Système conçu pour l'éducation en Afrique de l'Ouest.
+            © 2024 EcoleTech. Système conçu pour l'éducation au Bénin.
           </p>
         </div>
 

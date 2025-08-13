@@ -5,14 +5,12 @@ import { useAuth } from '../components/Auth/AuthProvider';
 export const useSupabase = () => {
   const { user } = useAuth();
   const [userProfile, setUserProfile] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (user) {
       loadUserProfile();
     } else {
       setUserProfile(null);
-      setLoading(false);
     }
   }, [user]);
 
@@ -32,7 +30,6 @@ export const useSupabase = () => {
     } catch (error) {
       console.error('Erreur lors du chargement du profil:', error);
     } finally {
-      setLoading(false);
     }
   };
 
@@ -243,7 +240,6 @@ export const useSupabase = () => {
 
   return {
     userProfile,
-    loading,
     logActivity,
     getDashboardData,
     getEnrollmentDetails,

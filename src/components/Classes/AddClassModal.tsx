@@ -69,9 +69,6 @@ const AddClassModal: React.FC<AddClassModalProps> = ({
       newErrors.capacity = 'La capacité doit être entre 10 et 50 élèves';
     }
 
-    if (!formData.teacherId) {
-      newErrors.teacherId = 'Un enseignant doit être assigné';
-    }
 
     if (formData.subjects.length === 0) {
       newErrors.subjects = 'Au moins une matière doit être sélectionnée';
@@ -98,7 +95,7 @@ const AddClassModal: React.FC<AddClassModalProps> = ({
       teacherId: '',
       teacherName: '',
       subjects: [],
-      classroom: ''
+      salary: 150000
     });
     setErrors({});
     onClose();
@@ -236,7 +233,8 @@ const AddClassModal: React.FC<AddClassModalProps> = ({
           </div>
 
           {/* Teacher Assignment */}
-          <div className="space-y-4">
+          {availableTeachers.length > 0 && (
+            <div className="space-y-4">
             <h3 className="text-lg font-semibold text-gray-800 flex items-center space-x-2">
               <User className="h-5 w-5" />
               <span>Enseignant Titulaire</span>
@@ -262,8 +260,15 @@ const AddClassModal: React.FC<AddClassModalProps> = ({
                 ))}
               </select>
               {errors.teacherId && <p className="text-red-500 text-sm mt-1">{errors.teacherId}</p>}
+              
+              {availableTeachers.length === 0 && (
+                <p className="text-sm text-yellow-700 mt-2">
+                  Aucun enseignant disponible. Vous pourrez assigner un enseignant plus tard.
+                </p>
+              )}
             </div>
-          </div>
+            </div>
+          )}
 
           {/* Subjects */}
           {formData.level && (
@@ -275,7 +280,7 @@ const AddClassModal: React.FC<AddClassModalProps> = ({
               
               <div className="p-4 bg-gray-50 rounded-lg">
                 <p className="text-sm text-gray-600 mb-3">
-                  Matières du programme officiel malien pour le niveau {formData.level}:
+                  Matières du programme officiel béninois pour le niveau {formData.level}:
                 </p>
                 
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
@@ -306,15 +311,17 @@ const AddClassModal: React.FC<AddClassModalProps> = ({
           )}
 
           {/* Summary */}
-          {formData.name && formData.level && formData.teacherName && (
+          {formData.name && formData.level && (
             <div className="p-4 bg-green-50 rounded-lg border border-green-200">
               <h4 className="font-medium text-green-800 mb-2">Résumé de la Classe</h4>
               <div className="text-sm text-green-700 space-y-1">
                 <p><strong>Classe:</strong> {formData.name} ({formData.level})</p>
-                <p><strong>Enseignant:</strong> {formData.teacherName}</p>
+                <p><strong>Enseignant:</strong> {formData.teacherName || 'À assigner plus tard'}</p>
                 <p><strong>Capacité:</strong> {formData.capacity} élèves</p>
                 <p><strong>Matières:</strong> {formData.subjects.length} matières sélectionnées</p>
-                <p><strong>Salaire:</strong> {formData.salary?.toLocaleString()} FCFA/mois</p>
+                {formData.teacherId && (
+                  <p><strong>Salaire:</strong> {formData.salary?.toLocaleString()} FCFA/mois</p>
+                )}
               </div>
             </div>
           )}

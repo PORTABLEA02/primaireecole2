@@ -19,7 +19,6 @@ interface UserProfile {
 export const useSupabaseAuth = () => {
   const [user, setUser] = useState<User | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -36,7 +35,6 @@ export const useSupabaseAuth = () => {
           setUser(null);
           setUserProfile(null);
         }
-        setLoading(false);
       }
     );
 
@@ -56,7 +54,6 @@ export const useSupabaseAuth = () => {
       console.error('Erreur de vérification de session:', error);
       setError('Erreur de vérification de session');
     } finally {
-      setLoading(false);
     }
   };
 
@@ -72,7 +69,6 @@ export const useSupabaseAuth = () => {
 
   const signIn = async (email: string, password: string) => {
     try {
-      setLoading(true);
       setError(null);
       
       const { user: authUser, profile } = await AuthService.signIn(email, password);
@@ -100,7 +96,6 @@ export const useSupabaseAuth = () => {
       setError(error.message || 'Erreur de connexion');
       return false;
     } finally {
-      setLoading(false);
     }
   };
 
@@ -163,7 +158,6 @@ export const useSupabaseAuth = () => {
   return {
     user,
     userProfile,
-    loading,
     error,
     signIn,
     signOut,

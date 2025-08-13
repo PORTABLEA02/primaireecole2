@@ -18,7 +18,6 @@ export const useDataSync = () => {
     teachers,
     classes,
     recentPayments,
-    loading,
     error,
     refreshData,
     logActivity
@@ -156,7 +155,6 @@ export const useDataSync = () => {
     syncStatus,
     lastSyncTime,
     isOnline,
-    loading,
     error,
     
     // Actions

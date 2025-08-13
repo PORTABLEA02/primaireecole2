@@ -240,3 +240,9 @@ export const getFeesByLevel = (level: string): number => {
 export const getAgeRange = (level: string) => {
   return AGE_RANGES[level as keyof typeof AGE_RANGES] || { min: 6, max: 12 };
 };
+
+// Validation des données avant envoi
+export const isValidPhoneNumber = (phone: string): boolean => {
+  const phoneRegex = /^\+229\s?[0-9]\d{7}$|^[0-9]\d{7}$/;
+  return phoneRegex.test(phone);
+};

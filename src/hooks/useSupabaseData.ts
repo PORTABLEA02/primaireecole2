@@ -15,7 +15,6 @@ export const useSupabaseData = (schoolId?: string, academicYearId?: string) => {
   const [recentPayments, setRecentPayments] = useState<any[]>([]);
   const [recentActivities, setRecentActivities] = useState<any[]>([]);
   const [statistics, setStatistics] = useState<any>(null);
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const effectiveSchoolId = schoolId || userProfile?.schoolId;
@@ -25,7 +24,6 @@ export const useSupabaseData = (schoolId?: string, academicYearId?: string) => {
     if (!effectiveSchoolId || !effectiveAcademicYearId) return;
 
     try {
-      setLoading(true);
       setError(null);
 
       const [
@@ -52,7 +50,6 @@ export const useSupabaseData = (schoolId?: string, academicYearId?: string) => {
       console.error('Erreur lors du chargement des données:', error);
       setError(error.message || 'Erreur lors du chargement des données');
     } finally {
-      setLoading(false);
     }
   }, [effectiveSchoolId, effectiveAcademicYearId]);
 
@@ -153,7 +150,6 @@ export const useSupabaseData = (schoolId?: string, academicYearId?: string) => {
     statistics,
     
     // État
-    loading,
     error,
     
     // Actions
@@ -169,6 +165,6 @@ export const useSupabaseData = (schoolId?: string, academicYearId?: string) => {
     
     // Indicateurs
     hasData: !!dashboardData,
-    isReady: !loading && !!effectiveSchoolId && !!effectiveAcademicYearId
+    isReady: !!effectiveSchoolId && !!effectiveAcademicYearId
   };
 };

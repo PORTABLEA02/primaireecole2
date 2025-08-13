@@ -26,6 +26,7 @@ export class UserService {
     role: 'Admin' | 'Directeur' | 'Secrétaire' | 'Enseignant' | 'Comptable';
     schoolId: string;
     permissions: string[];
+    teacherId?: string; // Pour lier à un enseignant existant
   }) {
     try {
       // Créer l'utilisateur dans auth
@@ -56,6 +57,13 @@ export class UserService {
 
         if (error) throw error;
         return data;
+        // Si c'est un enseignant, lier le profil à l'enseignant
+        if (userData.role === 'Enseignant' && userData.teacherId) {
+          await supabase
+            .from('teachers')
+            .update({ user_profile_id: authData.user.id })
+            .eq('id', userData.teacherId);
+        }
       }
 
       return null;

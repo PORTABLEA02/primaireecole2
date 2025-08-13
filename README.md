@@ -1,4 +1,4 @@
-# Système de Gestion Scolaire pour l'Afrique de l'Ouest
+# Système de Gestion Scolaire pour le Bénin
 
 ## Nouvelle Architecture - Gestion par Année Scolaire
 

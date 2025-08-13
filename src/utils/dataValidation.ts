@@ -163,7 +163,7 @@ export class DataValidation {
 
   // Validation de numéro de téléphone (format Mali)
   static isValidPhoneNumber(phone: string): boolean {
-    const phoneRegex = /^\+223\s?[67]\d{7}$/;
+    const phoneRegex = /^\+229\s?[0-9]\d{7}$|^[0-9]\d{7}$/;
     return phoneRegex.test(phone);
   }
 

@@ -28,6 +28,14 @@ interface ClassWithoutTeacher {
   current_students: number;
   capacity: number;
   subjects: string[];
+  teacher_assignment?: Array<{
+    teacher: {
+      first_name: string;
+      last_name: string;
+      email: string;
+    };
+    salary_amount: number;
+  }>;
 }
 
 interface Assignment {
@@ -44,10 +52,11 @@ const TeacherAssignmentModal: React.FC<TeacherAssignmentModalProps> = ({
   onAssignTeacher
 }) => {
   const { userSchool, currentAcademicYear } = useAuth();
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [availableTeachers, setAvailableTeachers] = useState<AvailableTeacher[]>([]);
   const [classesWithoutTeacher, setClassesWithoutTeacher] = useState<ClassWithoutTeacher[]>([]);
   const [assignedClasses, setAssignedClasses] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
   const [pendingAssignments, setPendingAssignments] = useState<Assignment[]>([]);
   const [selectedTeacher, setSelectedTeacher] = useState<AvailableTeacher | null>(null);
   const [selectedClass, setSelectedClass] = useState<ClassWithoutTeacher | null>(null);
@@ -74,14 +83,23 @@ const TeacherAssignmentModal: React.FC<TeacherAssignmentModalProps> = ({
       setAvailableTeachers(teachers);
       
       // Séparer les classes avec et sans enseignant
-      const withoutTeacher = allClasses.filter(c => !c.teacher_assignment?.teacher);
-      const withTeacher = allClasses.filter(c => c.teacher_assignment?.teacher);
+      const withoutTeacher = allClasses.filter(c => 
+        !c.teacher_assignment || 
+        c.teacher_assignment.length === 0 || 
+        !c.teacher_assignment.some(ta => ta.is_active)
+      );
+      const withTeacher = allClasses.filter(c => 
+        c.teacher_assignment && 
+        c.teacher_assignment.length > 0 && 
+        c.teacher_assignment.some(ta => ta.is_active)
+      );
       
       setClassesWithoutTeacher(withoutTeacher);
       setAssignedClasses(withTeacher);
 
     } catch (error) {
       console.error('Erreur lors du chargement:', error);
+      setError(error.message || 'Erreur lors du chargement des données');
     } finally {
       setLoading(false);
     }
@@ -247,13 +265,7 @@ const TeacherAssignmentModal: React.FC<TeacherAssignmentModalProps> = ({
               </h3>
               
               <div className="space-y-3 max-h-96 overflow-y-auto">
-                {loading ? (
-                  <div className="text-center py-8">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
-                    <p className="text-gray-600">Chargement...</p>
-                  </div>
-                ) : (
-                  availableTeachers.map((teacher) => (
+                {availableTeachers.map((teacher) => (
                     <div
                       key={teacher.id}
                       onClick={() => setSelectedTeacher(teacher)}
@@ -300,10 +312,9 @@ const TeacherAssignmentModal: React.FC<TeacherAssignmentModalProps> = ({
                         </div>
                       </div>
                     </div>
-                  ))
-                )}
+                  ))}
                 
-                {availableTeachers.length === 0 && !loading && (
+                {availableTeachers.length === 0 && (
                   <div className="text-center py-8">
                     <User className="h-12 w-12 text-gray-300 mx-auto mb-4" />
                     <p className="text-gray-500">Aucun enseignant disponible</p>
@@ -394,7 +405,7 @@ const TeacherAssignmentModal: React.FC<TeacherAssignmentModalProps> = ({
                   );
                 })}
                 
-                {classesWithoutTeacher.length === 0 && !loading && (
+                {classesWithoutTeacher.length === 0 && (
                   <div className="text-center py-8">
                     <CheckCircle className="h-12 w-12 text-green-500 mx-auto mb-4" />
                     <p className="text-green-600 font-medium">Toutes les classes ont un enseignant !</p>
@@ -414,7 +425,6 @@ const TeacherAssignmentModal: React.FC<TeacherAssignmentModalProps> = ({
                 <div className="text-center">
                   {selectedTeacher ? (
                     <div className="p-4 bg-blue-100 rounded-lg">
-                      <User className="h-8 w-8 text-blue-600 mx-auto mb-2" />
                       <p className="font-medium text-blue-800">
                         {selectedTeacher.first_name} {selectedTeacher.last_name}
                       </p>
@@ -528,10 +538,9 @@ const TeacherAssignmentModal: React.FC<TeacherAssignmentModalProps> = ({
                   
                   <div className="mt-3 p-3 bg-gray-50 rounded">
                     <p className="text-sm font-medium text-gray-700 mb-1">
-                      Enseignant: {classInfo.teacher_assignment?.teacher 
-                        ? `${classInfo.teacher_assignment.teacher.first_name} ${classInfo.teacher_assignment.teacher.last_name}`
-                        : 'Non assigné'
-                      }
+                      Enseignant: {classInfo.teacher_assignment?.[0]?.teacher 
+                        ? `${classInfo.teacher_assignment[0].teacher.first_name} ${classInfo.teacher_assignment[0].teacher.last_name}`
+                        : 'Non assigné'}
                     </p>
                     <div className="flex flex-wrap gap-1">
                       {(classInfo.subjects || []).slice(0, 3).map(subject => (

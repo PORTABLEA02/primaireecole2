@@ -1,85 +1,234 @@
-import React from 'react';
-import { useState } from 'react';
-import { DollarSign, TrendingUp, AlertCircle, CreditCard, Smartphone, Building } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { DollarSign, TrendingUp, AlertCircle, CreditCard, Smartphone, Building, RefreshCw, Download, Users, Calendar } from 'lucide-react';
 import PaymentModal from './PaymentModal';
-import { useAcademicYear } from '../../contexts/AcademicYearContext';
+import FinancialStatsCards from './FinancialStatsCards';
+import PaymentMethodsChart from './PaymentMethodsChart';
+import OutstandingPaymentsTable from './OutstandingPaymentsTable';
+import RecentPaymentsTable from './RecentPaymentsTable';
+import { useAuth } from '../Auth/AuthProvider';
+import { PaymentService } from '../../services/paymentService';
+import { ActivityLogService } from '../../services/activityLogService';
 
 interface Payment {
   id: string;
-  student: string;
-  class: string;
-  amount: string;
-  method: string;
-  date: string;
+  enrollment_id: string;
+  amount: number;
+  payment_type: string;
+  payment_date: string;
   status: string;
-  type?: string;
-  month?: string;
+  reference_number?: string;
+  mobile_number?: string;
+  bank_details?: string;
+  notes?: string;
+  enrollment: {
+    student: {
+      first_name: string;
+      last_name: string;
+    };
+    class: {
+      name: string;
+    };
+  };
+  payment_method?: {
+    name: string;
+    type: string;
+  };
+}
+
+interface FinancialStats {
+  totalRevenue: number;
+  totalOutstanding: number;
+  collectionRate: number;
+  recentPayments: number;
+  paymentsByMethod: Record<string, number>;
+  paymentsByType: Record<string, number>;
+  outstandingByLevel: Record<string, number>;
 }
 
 const FinanceManagement: React.FC = () => {
+  const { userSchool, currentAcademicYear, user } = useAuth();
   const [showPaymentModal, setShowPaymentModal] = useState(false);
-  const { currentAcademicYear } = useAcademicYear();
-  const [recentPayments, setRecentPayments] = useState<Payment[]>([
-    {
-      id: '1',
-      student: 'Kofi Mensah',
-      class: 'CM2A',
-      amount: '250,000',
-      method: 'Mobile Money',
-      date: 'Aujourd\'hui 14:30',
-      status: 'Confirmé',
-      type: 'Scolarité',
-      month: 'Solde scolarité'
-    },
-    {
-      id: '2',
-      student: 'Fatima Diallo', 
-      class: 'CE1B',
-      amount: '250,000',
-      method: 'Espèces',
-      date: 'Aujourd\'hui 11:15',
-      status: 'Confirmé',
-      type: 'Scolarité', 
-      month: 'Complément scolarité'
-    },
-    {
-      id: '3',
-      student: 'Amadou Kone',
-      class: 'CP2',
-      amount: '100,000', 
-      method: 'Virement',
-      date: 'Hier 16:45',
-      status: 'En attente',
-      type: 'Scolarité',
-      month: 'Acompte scolarité'
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  
+  // États des données
+  const [recentPayments, setRecentPayments] = useState<Payment[]>([]);
+  const [outstandingPayments, setOutstandingPayments] = useState<any[]>([]);
+  const [financialStats, setFinancialStats] = useState<FinancialStats | null>(null);
+  const [paymentMethods, setPaymentMethods] = useState<any[]>([]);
+
+  // Charger les données au montage
+  useEffect(() => {
+    if (userSchool && currentAcademicYear) {
+      loadFinancialData();
     }
-  ]);
+  }, [userSchool, currentAcademicYear]);
 
-  const paymentMethods = [
-    { name: 'Espèces', amount: '1,250,000', percentage: 45, color: 'green', icon: DollarSign },
-    { name: 'Mobile Money', amount: '980,000', percentage: 35, color: 'blue', icon: Smartphone },
-    { name: 'Virement Bancaire', amount: '560,000', percentage: 20, color: 'purple', icon: Building }
-  ];
+  const loadFinancialData = async () => {
+    if (!userSchool || !currentAcademicYear) return;
 
-  const handleAddPayment = (paymentData: any) => {
-    const newPayment: Payment = {
-      id: (recentPayments.length + 1).toString(),
-      student: paymentData.studentName,
-      class: paymentData.studentClass,
-      amount: paymentData.amount.toLocaleString(),
-      method: paymentData.method,
-      date: 'Maintenant',
-      status: 'Confirmé',
-      type: paymentData.type,
-      month: paymentData.month,
-      academicYear: currentAcademicYear
-    };
-    
-    setRecentPayments(prev => [newPayment, ...prev]);
-    
-    // Notification de succès (optionnel)
-    console.log('Nouveau paiement enregistré:', newPayment);
+    try {
+      setLoading(true);
+      setError(null);
+
+      // Charger toutes les données financières en parallèle
+      const [
+        recentPaymentsData,
+        outstandingData,
+        statsData,
+        methodsData
+      ] = await Promise.all([
+        PaymentService.getRecentPayments(userSchool.id, 10),
+        PaymentService.getOutstandingPayments(userSchool.id, currentAcademicYear.id),
+        PaymentService.getFinancialStats(userSchool.id, currentAcademicYear.id),
+        PaymentService.getPaymentMethods(userSchool.id)
+      ]);
+
+      setRecentPayments(recentPaymentsData);
+      setOutstandingPayments(outstandingData);
+      setPaymentMethods(methodsData);
+
+      // Calculer les statistiques financières
+      if (statsData) {
+        const totalRevenue = recentPaymentsData.reduce((sum, p) => sum + p.amount, 0);
+        const totalOutstanding = outstandingData.reduce((sum, p) => sum + p.outstanding_amount, 0);
+        
+        setFinancialStats({
+          totalRevenue,
+          totalOutstanding,
+          collectionRate: totalRevenue > 0 ? (totalRevenue / (totalRevenue + totalOutstanding)) * 100 : 0,
+          recentPayments: recentPaymentsData.length,
+          paymentsByMethod: statsData.revenueByMethod || {},
+          paymentsByType: statsData.revenueByType || {},
+          outstandingByLevel: statsData.outstandingByLevel || {}
+        });
+      }
+
+    } catch (error: any) {
+      console.error('Erreur lors du chargement des données financières:', error);
+      setError(error.message || 'Erreur lors du chargement des données');
+    } finally {
+      setLoading(false);
+    }
   };
+
+  const handleAddPayment = async (paymentData: any) => {
+    if (!userSchool || !currentAcademicYear) return;
+
+    try {
+      setLoading(true);
+
+      // Enregistrer le paiement
+      await PaymentService.recordPayment({
+        enrollmentId: paymentData.enrollmentId,
+        schoolId: userSchool.id,
+        academicYearId: currentAcademicYear.id,
+        amount: paymentData.amount,
+        paymentType: paymentData.type,
+        paymentDate: paymentData.date,
+        referenceNumber: paymentData.reference,
+        mobileNumber: paymentData.mobileNumber,
+        bankDetails: paymentData.bankDetails,
+        notes: paymentData.notes,
+        processedBy: user?.id // Utiliser l'ID de l'utilisateur connecté
+      });
+
+      // Logger l'activité
+      await ActivityLogService.logActivity({
+        schoolId: userSchool.id,
+        action: 'RECORD_PAYMENT',
+        entityType: 'payment',
+        level: 'success',
+        details: `Paiement enregistré: ${paymentData.amount.toLocaleString()} FCFA pour ${paymentData.studentName}`
+      });
+
+      // Recharger les données
+      await loadFinancialData();
+      
+      alert(`Paiement de ${paymentData.amount.toLocaleString()} FCFA enregistré avec succès !`);
+    } catch (error: any) {
+      console.error('Erreur lors de l\'enregistrement du paiement:', error);
+      alert(`Erreur: ${error.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const exportFinancialReport = async () => {
+    if (!userSchool || !currentAcademicYear) return;
+
+    try {
+      setLoading(true);
+      
+      // Préparer les données pour l'export
+      const exportData = {
+        school: userSchool.name,
+        academicYear: currentAcademicYear.name,
+        generatedAt: new Date().toISOString(),
+        stats: financialStats,
+        recentPayments: recentPayments.map(p => ({
+          date: p.payment_date,
+          student: `${p.enrollment.student.first_name} ${p.enrollment.student.last_name}`,
+          class: p.enrollment.class.name,
+          amount: p.amount,
+          type: p.payment_type,
+          method: p.payment_method?.name || 'Non spécifié',
+          status: p.status
+        })),
+        outstandingPayments: outstandingPayments.map(p => ({
+          student: `${p.first_name} ${p.last_name}`,
+          class: p.class_name,
+          level: p.level,
+          totalFees: p.total_fees,
+          paidAmount: p.paid_amount,
+          outstandingAmount: p.outstanding_amount,
+          paymentStatus: p.payment_status
+        }))
+      };
+
+      // Créer et télécharger le fichier JSON
+      const dataStr = JSON.stringify(exportData, null, 2);
+      const dataBlob = new Blob([dataStr], { type: 'application/json' });
+      const url = URL.createObjectURL(dataBlob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `rapport_financier_${userSchool.name}_${currentAcademicYear.name}_${new Date().toISOString().split('T')[0]}.json`;
+      link.click();
+      URL.revokeObjectURL(url);
+
+      // Logger l'export
+      await ActivityLogService.logActivity({
+        schoolId: userSchool.id,
+        action: 'EXPORT_FINANCIAL_REPORT',
+        entityType: 'report',
+        level: 'info',
+        details: 'Rapport financier exporté'
+      });
+
+    } catch (error: any) {
+      console.error('Erreur lors de l\'export:', error);
+      alert(`Erreur lors de l\'export: ${error.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center min-h-96">
+        <div className="text-center">
+          <AlertCircle className="h-8 w-8 text-red-600 mx-auto mb-4" />
+          <p className="text-red-600 mb-4">{error}</p>
+          <button
+            onClick={loadFinancialData}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+          >
+            Réessayer
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -87,16 +236,33 @@ const FinanceManagement: React.FC = () => {
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-xl sm:text-2xl font-bold text-gray-800">Gestion Financière</h1>
-          <p className="text-sm sm:text-base text-gray-600">Suivi des paiements, frais scolaires et statistiques financières</p>
+          <p className="text-sm sm:text-base text-gray-600">
+            {userSchool?.name} - Année {currentAcademicYear?.name}
+          </p>
         </div>
         
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3 w-full sm:w-auto">
-          <button className="px-4 py-2 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors text-sm sm:text-base">
-            Générer Rapport
+          <button 
+            onClick={loadFinancialData}
+            disabled={loading}
+            className="px-4 py-2 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors flex items-center justify-center space-x-2 text-sm sm:text-base"
+          >
+            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+            <span>Actualiser</span>
+          </button>
+
+          <button 
+            onClick={exportFinancialReport}
+            disabled={loading}
+            className="px-4 py-2 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors flex items-center justify-center space-x-2 text-sm sm:text-base"
+          >
+            <Download className="h-4 w-4" />
+            <span>Exporter</span>
           </button>
           
           <button 
             onClick={() => setShowPaymentModal(true)}
+            disabled={loading}
             className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center justify-center space-x-2 text-sm sm:text-base"
           >
             <DollarSign className="h-4 w-4" />
@@ -105,187 +271,82 @@ const FinanceManagement: React.FC = () => {
         </div>
       </div>
 
-      {/* Financial Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
-        <div className="bg-white p-4 sm:p-6 rounded-xl shadow-sm border border-gray-100">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-600">Revenus ce Mois</p>
-              <p className="text-lg sm:text-2xl font-bold text-gray-800 break-words">3,250,000 <span className="text-xs sm:text-sm text-gray-500">FCFA</span></p>
-            </div>
-            <div className="p-2 sm:p-3 bg-green-50 rounded-xl flex-shrink-0">
-              <TrendingUp className="h-5 w-5 sm:h-6 sm:w-6 text-green-600" />
-            </div>
-          </div>
-          <div className="mt-4">
-            <span className="text-xs sm:text-sm text-green-600 font-medium">+8.5%</span>
-            <span className="text-xs sm:text-sm text-gray-500 ml-1">vs mois précédent</span>
-          </div>
-        </div>
+      {/* Financial Stats Cards */}
+      {financialStats && (
+        <FinancialStatsCards 
+          stats={financialStats}
+          loading={loading}
+        />
+      )}
 
-        <div className="bg-white p-4 sm:p-6 rounded-xl shadow-sm border border-gray-100">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-600">Paiements en Attente</p>
-              <p className="text-lg sm:text-2xl font-bold text-gray-800">183</p>
-            </div>
-            <div className="p-2 sm:p-3 bg-yellow-50 rounded-xl flex-shrink-0">
-              <AlertCircle className="h-5 w-5 sm:h-6 sm:w-6 text-yellow-600" />
-            </div>
-          </div>
-          <div className="mt-4">
-            <span className="text-xs sm:text-sm text-yellow-600 font-medium">892,000 FCFA</span>
-            <span className="text-xs sm:text-sm text-gray-500 ml-1">montant total</span>
-          </div>
-        </div>
-
-        <div className="bg-white p-4 sm:p-6 rounded-xl shadow-sm border border-gray-100">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-600">Taux de Collecte</p>
-              <p className="text-lg sm:text-2xl font-bold text-gray-800">89%</p>
-            </div>
-            <div className="p-2 sm:p-3 bg-blue-50 rounded-xl flex-shrink-0">
-              <CreditCard className="h-5 w-5 sm:h-6 sm:w-6 text-blue-600" />
-            </div>
-          </div>
-          <div className="mt-4">
-            <div className="w-full bg-gray-200 rounded-full h-2">
-              <div className="bg-blue-600 h-2 rounded-full" style={{ width: '89%' }}></div>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white p-4 sm:p-6 rounded-xl shadow-sm border border-gray-100">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-600">Bourses Accordées</p>
-              <p className="text-lg sm:text-2xl font-bold text-gray-800">24</p>
-            </div>
-            <div className="p-2 sm:p-3 bg-purple-50 rounded-xl flex-shrink-0">
-              <span className="text-lg sm:text-2xl">🎓</span>
-            </div>
-          </div>
-          <div className="mt-4">
-            <span className="text-xs sm:text-sm text-purple-600 font-medium">320,000 FCFA</span>
-            <span className="text-xs sm:text-sm text-gray-500 ml-1">réduction accordée</span>
-          </div>
-        </div>
-      </div>
-
-      {/* Payment Methods */}
+      {/* Charts and Analysis */}
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-        <div className="bg-white p-4 sm:p-6 rounded-xl shadow-sm border border-gray-100">
-          <h2 className="text-base sm:text-lg font-semibold text-gray-800 mb-4">Répartition par Méthode de Paiement</h2>
-          
-          <div className="space-y-4">
-            {paymentMethods.map((method, index) => {
-              const Icon = method.icon;
-              const colorClasses = {
-                green: 'bg-green-50 text-green-600',
-                blue: 'bg-blue-50 text-blue-600', 
-                purple: 'bg-purple-50 text-purple-600'
-              };
-              
-              return (
-                <div key={index} className="flex items-center justify-between">
-                  <div className="flex items-center space-x-2 sm:space-x-3 min-w-0 flex-1">
-                    <div className={`p-1.5 sm:p-2 rounded-lg flex-shrink-0 ${colorClasses[method.color as keyof typeof colorClasses]}`}>
-                      <Icon className="h-3 w-3 sm:h-4 sm:w-4" />
-                    </div>
-                    <span className="text-sm sm:text-base font-medium text-gray-800 truncate">{method.name}</span>
-                  </div>
-                  
-                  <div className="text-right">
-                    <p className="text-sm sm:text-base font-semibold text-gray-800">{method.amount} FCFA</p>
-                    <p className="text-xs sm:text-sm text-gray-500">{method.percentage}%</p>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
+        {/* Payment Methods Chart */}
+        {financialStats && (
+          <PaymentMethodsChart 
+            paymentsByMethod={financialStats.paymentsByMethod}
+            paymentMethods={paymentMethods}
+          />
+        )}
 
         {/* Recent Payments */}
-        <div className="bg-white p-4 sm:p-6 rounded-xl shadow-sm border border-gray-100">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-base sm:text-lg font-semibold text-gray-800">Paiements Récents</h2>
-            <button className="text-blue-600 hover:text-blue-700 text-xs sm:text-sm font-medium">
-              Voir tout
-            </button>
-          </div>
-          
-          <div className="space-y-4">
-            {recentPayments.map((payment, index) => (
-              <div key={index} className="flex items-center justify-between p-2 sm:p-3 border border-gray-100 rounded-lg hover:bg-gray-50 transition-colors">
-                <div className="flex-1">
-                  <p className="text-sm sm:text-base font-medium text-gray-800">{payment.student}</p>
-                  <p className="text-xs sm:text-sm text-gray-500">{payment.class} • {payment.method}</p>
-                  <p className="text-xs text-gray-400">{payment.date}</p>
-                </div>
-                
-                <div className="text-right">
-                  <p className="text-sm sm:text-base font-semibold text-gray-800">{payment.amount} FCFA</p>
-                  <span className={`text-xs px-2 py-1 rounded-full ${
-                    payment.status === 'Confirmé' 
-                      ? 'bg-green-50 text-green-700'
-                      : 'bg-yellow-50 text-yellow-700'
-                  }`}>
-                    {payment.status}
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
+        <RecentPaymentsTable 
+          payments={recentPayments}
+          loading={loading}
+          onRefresh={loadFinancialData}
+        />
       </div>
 
-      {/* Outstanding Payments */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-        <div className="p-4 sm:p-6 border-b border-gray-100">
-          <h2 className="text-base sm:text-lg font-semibold text-gray-800">Paiements en Retard</h2>
-        </div>
-        
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Élève</th>
-                <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Classe</th>
-                <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Montant Dû</th>
-                <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase hidden sm:table-cell">Échéance</th>
-                <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase hidden sm:table-cell">Retard</th>
-                <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              <tr className="hover:bg-gray-50">
-                <td className="px-3 sm:px-6 py-4">
-                  <div className="flex items-center space-x-2 sm:space-x-3">
-                    <div className="w-8 h-8 bg-red-100 rounded-full flex items-center justify-center">
-                      <span className="text-red-600 text-xs font-medium">AD</span>
+      {/* Outstanding Payments Table */}
+      <OutstandingPaymentsTable 
+        outstandingPayments={outstandingPayments}
+        loading={loading}
+        onPaymentRecord={loadFinancialData}
+      />
+
+      {/* Summary by Level */}
+      {financialStats && Object.keys(financialStats.outstandingByLevel).length > 0 && (
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+          <div className="p-6 border-b border-gray-100">
+            <h2 className="text-lg font-semibold text-gray-800">Impayés par Niveau</h2>
+          </div>
+          
+          <div className="p-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              {Object.entries(financialStats.outstandingByLevel).map(([level, amount]) => (
+                <div key={level} className="p-4 bg-red-50 rounded-lg border border-red-200">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-red-600 font-medium">{level}</p>
+                      <p className="text-lg font-bold text-red-800">
+                        {(amount as number).toLocaleString()} FCFA
+                      </p>
                     </div>
-                    <span className="text-sm sm:text-base font-medium text-gray-800">Aminata Doumbia</span>
+                    <Users className="h-5 w-5 text-red-600" />
                   </div>
-                </td>
-                <td className="px-3 sm:px-6 py-4">
-                  <span className="px-2 py-1 bg-blue-50 text-blue-700 rounded text-sm">CE2A</span>
-                </td>
-                <td className="px-3 sm:px-6 py-4 text-sm sm:text-base font-semibold text-gray-800">150,000 FCFA</td>
-                <td className="px-3 sm:px-6 py-4 text-gray-600 hidden sm:table-cell">15 Oct 2024</td>
-                <td className="px-3 sm:px-6 py-4 hidden sm:table-cell">
-                  <span className="px-2 py-1 bg-red-50 text-red-700 rounded text-sm">Scolarité en retard</span>
-                </td>
-                <td className="px-3 sm:px-6 py-4">
-                  <button className="text-blue-600 hover:text-blue-800 text-xs sm:text-sm font-medium">
-                    Relancer
-                  </button>
-                </td>
-              </tr>
-            </tbody>
-          </table>
+                  <div className="mt-2">
+                    <p className="text-xs text-red-500">
+                      {outstandingPayments.filter(p => p.level === level).length} élève(s)
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
-      </div>
+      )}
+
+      {/* Loading State */}
+      {loading && (
+        <div className="fixed inset-0 bg-black bg-opacity-25 flex items-center justify-center z-40">
+          <div className="bg-white p-6 rounded-lg shadow-lg">
+            <div className="flex items-center space-x-3">
+              <RefreshCw className="h-5 w-5 text-blue-600 animate-spin" />
+              <span className="text-gray-700">Chargement des données financières...</span>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Payment Modal */}
       <PaymentModal

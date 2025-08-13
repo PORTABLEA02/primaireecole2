@@ -42,7 +42,7 @@ export const getInitials = (firstName: string, lastName: string): string => {
 
 // Formatage des numéros de téléphone
 export const formatPhoneNumber = (phone: string): string => {
-  // Format: +223 XX XX XX XX
+  // Format: +229 XX XX XX XX
   if (phone.startsWith('+229')) {
     const digits = phone.replace(/\D/g, '').substring(3);
     if (digits.length === 8) {

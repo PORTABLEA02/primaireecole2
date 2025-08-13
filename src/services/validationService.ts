@@ -71,18 +71,16 @@ export class ValidationService {
       errors.email = 'Format d\'email invalide';
     }
 
-    if (!teacherData.phone?.trim()) {
-      errors.phone = 'Le téléphone est requis';
-    } else if (!this.isValidPhoneNumber(teacherData.phone)) {
-      errors.phone = 'Format de téléphone invalide';
-    }
-
-    if (!teacherData.qualification?.trim()) {
-      errors.qualification = 'La qualification est requise';
+    if (teacherData.phone && !this.isValidPhoneNumber(teacherData.phone)) {
+      errors.phone = teacherData.phone;
     }
 
     if (teacherData.salary && (teacherData.salary < 50000 || teacherData.salary > 1000000)) {
       errors.salary = 'Le salaire doit être entre 50,000 et 1,000,000 FCFA';
+    }
+
+    if (teacherData.performanceRating && (teacherData.performanceRating < 1 || teacherData.performanceRating > 5)) {
+      errors.performanceRating = 'La note de performance doit être entre 1 et 5';
     }
 
     return {
@@ -170,20 +168,38 @@ export class ValidationService {
   // Vérifier l'unicité d'un email
   static async checkEmailUniqueness(email: string, schoolId: string, excludeId?: string): Promise<boolean> {
     try {
-      let query = supabase
+      // Vérifier dans les profils utilisateurs
+      let userQuery = supabase
         .from('user_profiles')
         .select('id')
         .eq('email', email)
         .eq('school_id', schoolId);
 
       if (excludeId) {
-        query = query.neq('id', excludeId);
+        userQuery = userQuery.neq('id', excludeId);
       }
 
-      const { data, error } = await query;
+      // Vérifier dans les enseignants
+      let teacherQuery = supabase
+        .from('teachers')
+        .select('id')
+        .eq('email', email)
+        .eq('school_id', schoolId);
 
-      if (error) throw error;
-      return (data?.length || 0) === 0;
+      if (excludeId) {
+        teacherQuery = teacherQuery.neq('id', excludeId);
+      }
+
+      const [userData, teacherData] = await Promise.all([
+        userQuery,
+        teacherQuery
+      ]);
+
+      if (userData.error || teacherData.error) {
+        throw userData.error || teacherData.error;
+      }
+
+      return (userData.data?.length || 0) === 0 && (teacherData.data?.length || 0) === 0;
     } catch (error) {
       console.error('Erreur lors de la vérification d\'unicité:', error);
       return false;
@@ -281,7 +297,7 @@ export class ValidationService {
   }
 
   private static isValidPhoneNumber(phone: string): boolean {
-    const phoneRegex = /^\+223\s?[67]\d{7}$/;
+    const phoneRegex = /^\+229\s?[0-9]\d{7}$|^[0-9]\d{7}$/;
     return phoneRegex.test(phone);
   }
 

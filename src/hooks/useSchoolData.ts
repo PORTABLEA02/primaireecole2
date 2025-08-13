@@ -14,7 +14,6 @@ export const useSchoolData = (schoolId?: string, academicYearId?: string) => {
   const [recentPayments, setRecentPayments] = useState<any[]>([]);
   const [outstandingPayments, setOutstandingPayments] = useState<any[]>([]);
   const [dashboardStats, setDashboardStats] = useState<any>(null);
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -27,7 +26,6 @@ export const useSchoolData = (schoolId?: string, academicYearId?: string) => {
     if (!schoolId || !academicYearId) return;
 
     try {
-      setLoading(true);
       setError(null);
 
       // Charger toutes les données en parallèle
@@ -58,7 +56,6 @@ export const useSchoolData = (schoolId?: string, academicYearId?: string) => {
       console.error('Erreur lors du chargement des données:', error);
       setError(error.message || 'Erreur lors du chargement des données');
     } finally {
-      setLoading(false);
     }
   };
 
@@ -211,7 +208,6 @@ export const useSchoolData = (schoolId?: string, academicYearId?: string) => {
     recentPayments,
     outstandingPayments,
     dashboardStats,
-    loading,
     error,
     refreshData,
     logActivity,

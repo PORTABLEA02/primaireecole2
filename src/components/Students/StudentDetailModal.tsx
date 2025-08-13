@@ -38,7 +38,6 @@ const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
   const [editData, setEditData] = useState<any>({});
   const [paymentHistory, setPaymentHistory] = useState<any[]>([]);
   const [grades, setGrades] = useState<any[]>([]);
-  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     if (isOpen && student) {
@@ -64,7 +63,6 @@ const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
     if (!student) return;
 
     try {
-      setLoading(true);
       
       // Charger l'historique des paiements
       const payments = await PaymentService.getPaymentHistory(student.id);
@@ -77,7 +75,6 @@ const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
     } catch (error) {
       console.error('Erreur lors du chargement des données supplémentaires:', error);
     } finally {
-      setLoading(false);
     }
   };
 
@@ -577,11 +574,7 @@ const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
 
                 <div className="bg-white border border-gray-200 rounded-lg p-6">
                   <h4 className="font-medium text-gray-800 mb-4">Historique des Paiements</h4>
-                  {loading ? (
-                    <div className="text-center py-4">
-                      <RefreshCw className="h-6 w-6 text-gray-400 animate-spin mx-auto" />
-                    </div>
-                  ) : paymentHistory.length > 0 ? (
+                  {paymentHistory.length > 0 ? (
                     <div className="space-y-3">
                       {paymentHistory.slice(0, 3).map((payment, index) => (
                         <div key={index} className="p-3 bg-gray-50 rounded-lg">

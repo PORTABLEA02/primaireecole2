@@ -1,4 +1,4 @@
-# Base de Données Supabase - Système de Gestion Scolaire
+# Base de Données Supabase - Système de Gestion Scolaire pour le Bénin
 
 ## Architecture de la Base de Données
 

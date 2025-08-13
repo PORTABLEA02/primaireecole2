@@ -53,7 +53,6 @@ export const SupabaseProvider: React.FC<SupabaseProviderProps> = ({ children }) 
   const auth = useSupabaseAuth();
   const [currentSchool, setCurrentSchool] = useState<any>(null);
   const [currentAcademicYear, setCurrentAcademicYear] = useState<any>(null);
-  const [initLoading, setInitLoading] = useState(true);
 
   const dataSync = useDataSync();
 
@@ -62,7 +61,6 @@ export const SupabaseProvider: React.FC<SupabaseProviderProps> = ({ children }) 
     if (auth.isAuthenticated && auth.userProfile) {
       loadInitialData();
     } else {
-      setInitLoading(false);
     }
   }, [auth.isAuthenticated, auth.userProfile]);
 
@@ -118,7 +116,6 @@ export const SupabaseProvider: React.FC<SupabaseProviderProps> = ({ children }) 
     } catch (error) {
       console.error('Erreur lors du chargement des données initiales:', error);
     } finally {
-      setInitLoading(false);
     }
   };
 
@@ -149,7 +146,7 @@ export const SupabaseProvider: React.FC<SupabaseProviderProps> = ({ children }) 
     logActivity: dataSync.logActivity,
     
     // Loading states
-    loading: auth.loading || initLoading || dataSync.loading,
+    loading: false,
     error: auth.error || dataSync.error
   };
 

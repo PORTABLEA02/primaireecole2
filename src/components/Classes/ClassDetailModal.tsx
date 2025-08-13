@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, Users, BookOpen, User, MapPin, Calendar, Edit, Save, Phone, Mail, Award, Clock, TrendingUp, RefreshCw } from 'lucide-react';
 import { ClassService } from '../../services/classService';
 import { useAuth } from '../Auth/AuthProvider';
+import { supabase } from '../../lib/supabase';
 
 interface ClassDetailModalProps {
   isOpen: boolean;
@@ -11,18 +12,6 @@ interface ClassDetailModalProps {
 }
 
 
-interface Student {
-  id: string;
-  firstName: string;
-  lastName: string;
-  age: number;
-  parentPhone: string;
-  parentEmail: string;
-  enrollmentDate: string;
-  paymentStatus: 'À jour' | 'En retard' | 'Partiel';
-  lastGrade?: number;
-  attendance: number;
-}
 
 const ClassDetailModal: React.FC<ClassDetailModalProps> = ({
   isOpen,
@@ -51,13 +40,29 @@ const ClassDetailModal: React.FC<ClassDetailModalProps> = ({
     try {
       setLoading(true);
 
-      const [students, stats] = await Promise.all([
+      const [students] = await Promise.all([
         ClassService.getClassDetails(classData.id, currentAcademicYear.id),
-        ClassService.getClassStats(classData.id, currentAcademicYear.id)
+        // Note: getClassStats nécessite un gradePeriodId, on le charge séparément si nécessaire
       ]);
 
       setClassStudents(students);
-      setClassStats(stats);
+      
+      // Charger les stats si on a une période active
+      try {
+        const { data: activePeriod } = await supabase
+          .from('grade_periods')
+          .select('id')
+          .eq('school_id', userSchool.id)
+          .eq('is_active', true)
+          .single();
+          
+        if (activePeriod) {
+          const stats = await ClassService.getClassStats(classData.id, activePeriod.id);
+          setClassStats(stats);
+        }
+      } catch (error) {
+        console.log('Aucune période d\'évaluation active trouvée');
+      }
 
     } catch (error) {
       console.error('Erreur lors du chargement des données de la classe:', error);
@@ -308,8 +313,8 @@ const ClassDetailModal: React.FC<ClassDetailModalProps> = ({
                     </div>
                   ) : (
                     <div className="text-center py-4">
-                      <RefreshCw className="h-6 w-6 text-gray-400 animate-spin mx-auto mb-2" />
-                      <p className="text-gray-500">Chargement...</p>
+                      <BookOpen className="h-8 w-8 text-gray-300 mx-auto mb-2" />
+                      <p className="text-gray-500">Aucune donnée disponible</p>
                     </div>
                   )}
                 </div>
@@ -342,12 +347,6 @@ const ClassDetailModal: React.FC<ClassDetailModalProps> = ({
                 </button>
               </div>
 
-              {loading ? (
-                <div className="text-center py-8">
-                  <RefreshCw className="h-8 w-8 text-blue-600 animate-spin mx-auto mb-4" />
-                  <p className="text-gray-600">Chargement des élèves...</p>
-                </div>
-              ) : (
               <div className="overflow-x-auto">
                 <table className="w-full">
                   <thead className="bg-gray-50">
@@ -423,9 +422,8 @@ const ClassDetailModal: React.FC<ClassDetailModalProps> = ({
                   </tbody>
                 </table>
               </div>
-              )}
 
-              {!loading && classStudents.length === 0 && (
+              {classStudents.length === 0 && (
                 <div className="text-center py-8">
                   <Users className="h-12 w-12 text-gray-300 mx-auto mb-4" />
                   <p className="text-gray-500">Aucun élève inscrit dans cette classe</p>

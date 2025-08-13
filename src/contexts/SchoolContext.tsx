@@ -30,7 +30,6 @@ export const SchoolProvider: React.FC<SchoolProviderProps> = ({ children }) => {
   const { userSchool, isAuthenticated } = useAuth();
   const [currentSchool, setCurrentSchoolState] = useState<School | null>(null);
   const [schools, setSchools] = useState<School[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
 
   // Écoles de démonstration
   const defaultSchools: School[] = [
@@ -133,7 +132,6 @@ export const SchoolProvider: React.FC<SchoolProviderProps> = ({ children }) => {
     if (isAuthenticated && userSchool) {
       setCurrentSchoolState(userSchool);
       setSchools([userSchool]); // Pour l'instant, on ne charge que l'école de l'utilisateur
-      setIsLoading(false);
       return;
     }
 
@@ -163,7 +161,6 @@ export const SchoolProvider: React.FC<SchoolProviderProps> = ({ children }) => {
       setCurrentSchoolState(defaultSchools[0]);
     }
     
-    setIsLoading(false);
   }, [isAuthenticated, userSchool]);
 
   const setCurrentSchool = (school: School) => {
@@ -210,7 +207,6 @@ export const SchoolProvider: React.FC<SchoolProviderProps> = ({ children }) => {
     addSchool,
     updateSchool,
     deleteSchool,
-    isLoading
   };
 
   return (
