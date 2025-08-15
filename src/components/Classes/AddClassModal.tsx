@@ -44,6 +44,7 @@ const AddClassModal: React.FC<AddClassModalProps> = ({
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   const levels = [
+    'Garderie',
     'Maternelle',
     'CI',
     'CP',

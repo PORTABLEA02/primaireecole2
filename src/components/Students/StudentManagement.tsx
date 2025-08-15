@@ -1,16 +1,23 @@
 import React, { useState, useEffect } from 'react';
-import { Users, Plus, RefreshCw, AlertCircle } from 'lucide-react';
+import { Users, Plus, RefreshCw, AlertCircle, Upload } from 'lucide-react';
 import AddStudentModal from './AddStudentModal';
 import StudentDetailModal from './StudentDetailModal';
 import TransferStudentModal from './TransferStudentModal';
+import StudentInvoiceModal from './StudentInvoiceModal';
 import StudentStatsCard from './StudentStatsCard';
 import StudentFilters from './StudentFilters';
 import StudentTable from './StudentTable';
+import ImportButton from '../Import/ImportButton';
+import { OptimizedDataTable } from '../Common/OptimizedDataTable';
+import { useOptimizedData } from '../../hooks/useOptimizedData';
+import SmartLoader from '../Common/SmartLoader';
+import { SkeletonTable, EmptyState } from '../Common/LoadingStates';
 import { useAuth } from '../Auth/AuthProvider';
 import { StudentService } from '../../services/studentService';
 import { PaymentService } from '../../services/paymentService';
 import { ActivityLogService } from '../../services/activityLogService';
 import { StudentHelpers } from '../../utils/studentHelpers';
+import { PerformanceOptimizer } from '../../utils/performanceOptimizer';
 
 interface Student {
   id: string;
@@ -38,8 +45,6 @@ interface Student {
 
 const StudentManagement: React.FC = () => {
   const { userSchool, currentAcademicYear, user } = useAuth();
-  const [students, setStudents] = useState<Student[]>([]);
-  const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [classFilter, setClassFilter] = useState('all');
   const [paymentFilter, setPaymentFilter] = useState('all');
@@ -48,40 +53,46 @@ const StudentManagement: React.FC = () => {
   const [showAddStudentModal, setShowAddStudentModal] = useState(false);
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [showTransferModal, setShowTransferModal] = useState(false);
-  const [stats, setStats] = useState<any>(null);
+  const [showInvoiceModal, setShowInvoiceModal] = useState(false);
 
-  // Charger les données
-  useEffect(() => {
-    if (userSchool && currentAcademicYear) {
-      loadStudents();
-      loadStats();
+  // Chargement optimisé des données
+  const {
+    data: studentsData,
+    isLoading,
+    error,
+    refresh,
+    progress,
+    stage
+  } = useOptimizedData(
+    async () => {
+      if (!userSchool || !currentAcademicYear) {
+        throw new Error('Données manquantes');
+      }
+
+      // Utiliser le système de cache et de déduplication
+      const [students, stats] = await Promise.all([
+        PerformanceOptimizer.memoizedRequest(
+          `students_${userSchool.id}_${currentAcademicYear.id}`,
+          () => StudentService.getStudents(userSchool.id, currentAcademicYear.id)
+        ),
+        PerformanceOptimizer.memoizedRequest(
+          `student_stats_${userSchool.id}_${currentAcademicYear.id}`,
+          () => StudentService.getStudentStats(userSchool.id, currentAcademicYear.id)
+        )
+      ]);
+
+      return { students, stats };
+    },
+    {
+      cacheKey: 'students_management',
+      dependencies: [userSchool?.id, currentAcademicYear?.id],
+      cacheDuration: 3 * 60 * 1000, // 3 minutes
+      enableRealTime: true
     }
-  }, [userSchool, currentAcademicYear]);
+  );
 
-  const loadStudents = async () => {
-    if (!userSchool || !currentAcademicYear) return;
-
-    try {
-      setError(null);
-      const data = await StudentService.getStudents(userSchool.id, currentAcademicYear.id);
-      setStudents(data);
-    } catch (error: any) {
-      console.error('Erreur lors du chargement des élèves:', error);
-      setError(error.message || 'Erreur lors du chargement des élèves');
-    } finally {
-    }
-  };
-
-  const loadStats = async () => {
-    if (!userSchool || !currentAcademicYear) return;
-
-    try {
-      const statsData = await StudentService.getStudentStats(userSchool.id, currentAcademicYear.id);
-      setStats(statsData);
-    } catch (error) {
-      console.error('Erreur lors du chargement des statistiques:', error);
-    }
-  };
+  const students = studentsData?.students || [];
+  const stats = studentsData?.stats;
 
   // Filtrer les élèves
   const filteredStudents = React.useMemo(() => {
@@ -131,21 +142,16 @@ const StudentManagement: React.FC = () => {
       
       // Si un paiement initial est effectué, l'enregistrer
       if (enrollmentData.initialPayment > 0) {
-        // Obtenir l'ID de la méthode de paiement
-        const paymentMethod = await PaymentService.getPaymentMethodByName(
-          userSchool.id, 
-          enrollmentData.paymentMethod
-        );
-        
+        const referencePrefix = enrollmentData.paymentType === 'Inscription' ? 'INS' : 'SCO';
         await PaymentService.recordPayment({
           enrollmentId: enrollment.id,
           schoolId: userSchool.id,
           academicYearId: currentAcademicYear.id,
           amount: enrollmentData.initialPayment,
-          paymentMethodId: paymentMethod?.id,
+          paymentMethodId: enrollmentData.paymentMethodId || null,
           paymentType: enrollmentData.paymentType,
           paymentDate: new Date().toISOString().split('T')[0],
-          referenceNumber: `${enrollmentData.paymentType === 'Inscription' ? 'INS' : 'SCOL'}-${Date.now()}`,
+          referenceNumber: `${referencePrefix}-${Date.now()}`,
           mobileNumber: enrollmentData.mobileNumber,
           bankDetails: enrollmentData.bankDetails,
           notes: enrollmentData.notes,
@@ -158,20 +164,17 @@ const StudentManagement: React.FC = () => {
           action: 'RECORD_INITIAL_PAYMENT',
           entityType: 'payment',
           level: 'success',
-          details: `Paiement ${enrollmentData.paymentType.toLowerCase()} de ${enrollmentData.initialPayment.toLocaleString()} FCFA pour ${studentData.firstName} ${studentData.lastName}`
+          details: `Paiement initial ${enrollmentData.paymentType} de ${enrollmentData.initialPayment.toLocaleString()} FCFA pour ${studentData.firstName} ${studentData.lastName}`
         });
-        
-        // Message de succès avec paiement
-        const message = `Élève inscrit avec succès ! Paiement ${enrollmentData.paymentType.toLowerCase()} de ${enrollmentData.initialPayment.toLocaleString()} FCFA enregistré.`;
-        alert(message);
-      } else {
-        // Message de succès sans paiement
-        alert('Élève inscrit avec succès ! Aucun paiement enregistré (montant = 0).');
       }
       
       // Recharger les données
-      await loadStudents();
-      await loadStats();
+      refresh();
+      
+      const message = enrollmentData.initialPayment > 0 
+        ? `Élève inscrit avec succès ! Paiement initial ${enrollmentData.paymentType} de ${enrollmentData.initialPayment.toLocaleString()} FCFA enregistré.`
+        : 'Élève inscrit avec succès !';
+      alert(message);
     } catch (error: any) {
       console.error('Erreur lors de l\'ajout:', error);
       alert(`Erreur: ${error.message}`);
@@ -196,8 +199,7 @@ const StudentManagement: React.FC = () => {
         const enrollment = students.find(s => s.student_id === student.student_id);
         if (enrollment) {
           await StudentService.withdrawStudent(enrollment.id, reason);
-          await loadStudents();
-          await loadStats();
+          refresh();
           alert('Élève retiré avec succès');
         }
       } catch (error: any) {
@@ -206,6 +208,10 @@ const StudentManagement: React.FC = () => {
     }
   };
 
+  const handlePrintInvoice = (student: Student) => {
+    setSelectedStudent(student);
+    setShowInvoiceModal(true);
+  };
   const exportStudents = () => {
     const exportData = filteredStudents.map(student => 
       StudentHelpers.formatStudentForExport(student)
@@ -237,103 +243,220 @@ const StudentManagement: React.FC = () => {
     document.body.removeChild(link);
   };
 
-  if (error) {
-    return (
-      <div className="flex items-center justify-center min-h-96">
-        <div className="text-center">
-          <AlertCircle className="h-8 w-8 text-red-600 mx-auto mb-4" />
-          <p className="text-red-600 mb-4">{error}</p>
-          <button
-            onClick={loadStudents}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-          >
-            Réessayer
-          </button>
+  // Définir les colonnes pour le tableau optimisé
+  const tableColumns = [
+    {
+      key: 'name' as keyof Student,
+      label: 'Élève',
+      render: (_, student: Student) => (
+        <div className="flex items-center space-x-3">
+          <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
+            <span className="text-blue-600 font-medium">
+              {StudentHelpers.getInitials(student.first_name, student.last_name)}
+            </span>
+          </div>
+          <div>
+            <p className="font-medium text-gray-800">
+              {StudentHelpers.formatFullName(student.first_name, student.last_name)}
+            </p>
+            <p className="text-sm text-gray-500">
+              {student.gender} • {StudentHelpers.calculateAge(student.date_of_birth)} ans
+            </p>
+          </div>
         </div>
-      </div>
-    );
-  }
+      ),
+      searchable: true
+    },
+    {
+      key: 'class_name' as keyof Student,
+      label: 'Classe',
+      render: (value: string, student: Student) => (
+        <div>
+          <span className="px-3 py-1 bg-blue-50 text-blue-700 rounded-full text-sm font-medium">
+            {value}
+          </span>
+          <p className="text-xs text-gray-500 mt-1">{student.level}</p>
+        </div>
+      ),
+      searchable: true
+    },
+    {
+      key: 'payment_status' as keyof Student,
+      label: 'Paiement',
+      render: (status: string, student: Student) => {
+        const display = StudentHelpers.getPaymentStatusDisplay(status);
+        const progress = StudentHelpers.calculatePaymentProgress(student.paid_amount, student.total_fees);
+        
+        return (
+          <div className="space-y-2">
+            <span className={`px-3 py-1 rounded-full text-sm font-medium ${display.className}`}>
+              {status}
+            </span>
+            <div className="text-sm text-gray-600">
+              {student.paid_amount.toLocaleString()}/{student.total_fees.toLocaleString()} FCFA
+            </div>
+            <div className="w-full bg-gray-200 rounded-full h-1">
+              <div 
+                className={`h-1 rounded-full ${
+                  progress === 100 ? 'bg-green-600' :
+                  progress > 0 ? 'bg-yellow-600' : 'bg-red-600'
+                }`}
+                style={{ width: `${Math.min(progress, 100)}%` }}
+              ></div>
+            </div>
+          </div>
+        );
+      }
+    }
+  ];
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-800">Gestion des Élèves</h1>
-          <p className="text-gray-600">
-            {userSchool?.name} - Année {currentAcademicYear?.name}
-          </p>
+    <SmartLoader
+      isLoading={isLoading}
+      error={error}
+      progress={progress}
+      stage={stage}
+      onRetry={refresh}
+    >
+      <div className="space-y-6">
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-800">Gestion des Élèves</h1>
+            <p className="text-gray-600">
+              {userSchool?.name} - Année {currentAcademicYear?.name}
+            </p>
+          </div>
+          
+          <div className="flex items-center space-x-3">
+            <ImportButton 
+              onImportComplete={refresh}
+              variant="secondary"
+            />
+            <button 
+              onClick={() => setShowAddStudentModal(true)}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2"
+            >
+              <Plus className="h-4 w-4" />
+              <span>Nouvel Élève</span>
+            </button>
+          </div>
         </div>
-        
-        <div className="flex items-center space-x-3">
-          <button 
-            onClick={() => setShowAddStudentModal(true)}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2"
-          >
-            <Plus className="h-4 w-4" />
-            <span>Nouvel Élève</span>
-          </button>
-        </div>
+
+        {/* Stats Cards */}
+        {stats ? (
+          <StudentStatsCard stats={stats} />
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            {Array.from({ length: 4 }).map((_, index) => (
+              <div key={index} className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 animate-pulse">
+                <div className="flex items-center justify-between">
+                  <div className="space-y-2">
+                    <div className="h-4 bg-gray-200 rounded w-24"></div>
+                    <div className="h-8 bg-gray-200 rounded w-32"></div>
+                  </div>
+                  <div className="w-12 h-12 bg-gray-200 rounded-xl"></div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Search and Filters */}
+        <StudentFilters
+          searchTerm={searchTerm}
+          onSearchChange={setSearchTerm}
+          classFilter={classFilter}
+          onClassFilterChange={setClassFilter}
+          paymentFilter={paymentFilter}
+          onPaymentFilterChange={setPaymentFilter}
+          statusFilter={statusFilter}
+          onStatusFilterChange={setStatusFilter}
+          availableClasses={uniqueClasses}
+          onRefresh={refresh}
+          onExport={exportStudents}
+        />
+
+        {/* Table optimisée */}
+        <OptimizedDataTable
+          data={filteredStudents}
+          columns={tableColumns}
+          isLoading={isLoading}
+          error={error}
+          onRetry={refresh}
+          onRefresh={refresh}
+          onExport={exportStudents}
+          searchPlaceholder="Rechercher par nom, parent, téléphone..."
+          emptyState={{
+            icon: Users,
+            title: 'Aucun élève trouvé',
+            description: 'Commencez par ajouter votre premier élève',
+            action: {
+              label: 'Ajouter un Élève',
+              onClick: () => setShowAddStudentModal(true)
+            }
+          }}
+          actions={(student) => (
+            <div className="flex items-center space-x-2">
+              <button 
+                onClick={() => handleViewStudent(student)}
+                className="p-1 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded transition-colors"
+                title="Voir détails"
+              >
+                <Users className="h-4 w-4" />
+              </button>
+              <button 
+                onClick={() => handleTransferStudent(student)}
+                className="p-1 text-purple-600 hover:text-purple-800 hover:bg-purple-50 rounded transition-colors"
+                title="Transférer"
+              >
+                <RefreshCw className="h-4 w-4" />
+              </button>
+            </div>
+          )}
+        />
+
+        {/* Modals */}
+        <AddStudentModal
+          isOpen={showAddStudentModal}
+          onClose={() => setShowAddStudentModal(false)}
+          onAddStudent={handleAddStudent}
+        />
+
+        {selectedStudent && (
+          <>
+            <StudentDetailModal
+              isOpen={showDetailModal}
+              onClose={() => {
+                setShowDetailModal(false);
+                setSelectedStudent(null);
+              }}
+              student={selectedStudent}
+              onUpdate={refresh}
+            />
+
+            <TransferStudentModal
+              isOpen={showTransferModal}
+              onClose={() => {
+                setShowTransferModal(false);
+                setSelectedStudent(null);
+              }}
+              student={selectedStudent}
+              onTransfer={refresh}
+            />
+
+            <StudentInvoiceModal
+              isOpen={showInvoiceModal}
+              onClose={() => {
+                setShowInvoiceModal(false);
+                setSelectedStudent(null);
+              }}
+              student={selectedStudent}
+            />
+          </>
+        )}
       </div>
-
-      {/* Stats Cards */}
-      {stats && <StudentStatsCard stats={stats} />}
-
-      {/* Search and Filters */}
-      <StudentFilters
-        searchTerm={searchTerm}
-        onSearchChange={setSearchTerm}
-        classFilter={classFilter}
-        onClassFilterChange={setClassFilter}
-        paymentFilter={paymentFilter}
-        onPaymentFilterChange={setPaymentFilter}
-        statusFilter={statusFilter}
-        onStatusFilterChange={setStatusFilter}
-        availableClasses={uniqueClasses}
-        onRefresh={loadStudents}
-        onExport={exportStudents}
-      />
-
-      {/* Students Table */}
-      <StudentTable
-        students={filteredStudents}
-        onViewStudent={handleViewStudent}
-        onEditStudent={handleViewStudent}
-        onTransferStudent={handleTransferStudent}
-        onWithdrawStudent={handleWithdrawStudent}
-      />
-
-      {/* Modals */}
-      <AddStudentModal
-        isOpen={showAddStudentModal}
-        onClose={() => setShowAddStudentModal(false)}
-        onAddStudent={handleAddStudent}
-      />
-
-      {selectedStudent && (
-        <>
-          <StudentDetailModal
-            isOpen={showDetailModal}
-            onClose={() => {
-              setShowDetailModal(false);
-              setSelectedStudent(null);
-            }}
-            student={selectedStudent}
-            onUpdate={loadStudents}
-          />
-
-          <TransferStudentModal
-            isOpen={showTransferModal}
-            onClose={() => {
-              setShowTransferModal(false);
-              setSelectedStudent(null);
-            }}
-            student={selectedStudent}
-            onTransfer={loadStudents}
-          />
-        </>
-      )}
-    </div>
+    </SmartLoader>
   );
 };
 

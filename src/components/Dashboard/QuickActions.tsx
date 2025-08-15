@@ -1,34 +1,42 @@
 import React from 'react';
-import { Plus, UserPlus, FileText, Calendar } from 'lucide-react';
-
-const quickActions = [
-  {
-    title: 'Inscription',
-    description: 'Inscrire un élève',
-    icon: UserPlus,
-    color: 'blue'
-  },
-  {
-    title: 'Nouveau Paiement',
-    description: 'Enregistrer un paiement',
-    icon: Plus,
-    color: 'green'
-  },
-  {
-    title: 'Générer Bulletin',
-    description: 'Créer des bulletins scolaires',
-    icon: FileText,
-    color: 'purple'
-  },
-  {
-    title: 'Emploi du Temps',
-    description: 'Gérer les horaires',
-    icon: Calendar,
-    color: 'orange'
-  }
-];
+import { Plus, FileText, Calendar, Users, Upload } from 'lucide-react';
+import { useRouter } from '../../contexts/RouterContext';
+import ImportButton from '../Import/ImportButton';
 
 const QuickActions: React.FC = () => {
+  const { navigate } = useRouter();
+
+  const quickActions = [
+    {
+      title: 'Gestion Élèves',
+      description: 'Gérer les élèves',
+      icon: Users,
+      color: 'blue',
+      action: () => navigate('students')
+    },
+    {
+      title: 'Nouveau Paiement',
+      description: 'Enregistrer un paiement',
+      icon: Plus,
+      color: 'green',
+      action: () => navigate('finance')
+    },
+    {
+      title: 'Saisir Notes',
+      description: 'Saisir des notes',
+      icon: FileText,
+      color: 'purple',
+      action: () => navigate('academic')
+    },
+    {
+      title: 'Emploi du Temps',
+      description: 'Gérer les horaires',
+      icon: Calendar,
+      color: 'orange',
+      action: () => navigate('schedule')
+    }
+  ];
+
   const getColorClasses = (color: string) => {
     const colorMap = {
       blue: 'bg-blue-50 text-blue-600 hover:bg-blue-100',
@@ -50,6 +58,7 @@ const QuickActions: React.FC = () => {
           return (
             <button
               key={index}
+              onClick={action.action}
               className={`w-full p-3 sm:p-4 rounded-lg transition-colors text-left ${getColorClasses(action.color)}`}
             >
               <div className="flex items-center space-x-2 sm:space-x-3">
@@ -65,7 +74,16 @@ const QuickActions: React.FC = () => {
       </div>
 
       <div className="mt-6 pt-6 border-t border-gray-100">
-        <button className="w-full py-2 sm:py-3 px-4 bg-blue-600 text-white rounded-lg text-sm sm:text-base font-medium hover:bg-blue-700 transition-colors">
+        <h3 className="text-sm font-medium text-gray-700 mb-3">Import en Masse</h3>
+        <ImportButton 
+          variant="secondary" 
+          size="sm"
+          className="w-full"
+        />
+      </div>
+
+      <div className="mt-6 pt-6 border-t border-gray-100">
+        <button onClick={() => navigate('settings')} className="w-full py-2 sm:py-3 px-4 bg-blue-600 text-white rounded-lg text-sm sm:text-base font-medium hover:bg-blue-700 transition-colors">
           Voir toutes les actions
         </button>
       </div>

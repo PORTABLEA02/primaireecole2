@@ -140,4 +140,54 @@ export class SessionUtils {
       return { status: 'error', error: error.message };
     }
   }
+
+  // Obtenir les métriques de session pour le monitoring
+  static getSessionMetrics(): {
+    sessionDuration: number;
+    lastActivity: Date | null;
+    pageViews: number;
+    actionsPerformed: number;
+  } {
+    const sessionStart = localStorage.getItem('ecoletech_session_start');
+    const lastActivity = localStorage.getItem('ecoletech_last_activity');
+    const pageViews = parseInt(localStorage.getItem('ecoletech_page_views') || '0');
+    const actionsPerformed = parseInt(localStorage.getItem('ecoletech_actions_count') || '0');
+
+    return {
+      sessionDuration: sessionStart ? Date.now() - parseInt(sessionStart) : 0,
+      lastActivity: lastActivity ? new Date(parseInt(lastActivity)) : null,
+      pageViews,
+      actionsPerformed
+    };
+  }
+
+  // Enregistrer une action utilisateur
+  static recordUserAction(actionType: string): void {
+    const currentCount = parseInt(localStorage.getItem('ecoletech_actions_count') || '0');
+    localStorage.setItem('ecoletech_actions_count', (currentCount + 1).toString());
+    localStorage.setItem('ecoletech_last_activity', Date.now().toString());
+    
+    // Logger les actions importantes
+    if (['login', 'logout', 'data_export', 'settings_change'].includes(actionType)) {
+      console.log(`Action utilisateur enregistrée: ${actionType}`);
+    }
+  }
+
+  // Initialiser une nouvelle session
+  static initializeSession(): void {
+    const now = Date.now().toString();
+    localStorage.setItem('ecoletech_session_start', now);
+    localStorage.setItem('ecoletech_last_activity', now);
+    localStorage.setItem('ecoletech_page_views', '1');
+    localStorage.setItem('ecoletech_actions_count', '0');
+  }
+
+  // Nettoyer les données de session
+  static cleanupSession(): void {
+    localStorage.removeItem('ecoletech_session_start');
+    localStorage.removeItem('ecoletech_last_activity');
+    localStorage.removeItem('ecoletech_page_views');
+    localStorage.removeItem('ecoletech_actions_count');
+    localStorage.removeItem('ecoletech_current_route');
+  }
 }

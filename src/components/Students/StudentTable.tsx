@@ -9,7 +9,8 @@ import {
   UserPlus,
   AlertCircle,
   CheckCircle,
-  Clock
+  Clock,
+  Printer
 } from 'lucide-react';
 import { StudentHelpers } from '../../utils/studentHelpers';
 
@@ -19,6 +20,7 @@ interface StudentTableProps {
   onEditStudent: (student: any) => void;
   onTransferStudent: (student: any) => void;
   onWithdrawStudent: (student: any) => void;
+  onPrintInvoice: (student: any) => void;
 }
 
 const StudentTable: React.FC<StudentTableProps> = ({
@@ -27,6 +29,7 @@ const StudentTable: React.FC<StudentTableProps> = ({
   onEditStudent,
   onTransferStudent,
   onWithdrawStudent,
+  onPrintInvoice,
 }) => {
   const getStatusColor = (isActive: boolean) => {
     return isActive 
@@ -171,6 +174,13 @@ const StudentTable: React.FC<StudentTableProps> = ({
                         title="Modifier"
                       >
                         <Edit className="h-4 w-4" />
+                      </button>
+                      <button 
+                        onClick={() => onPrintInvoice(student)}
+                        className="p-1 text-purple-600 hover:text-purple-800 hover:bg-purple-50 rounded transition-colors"
+                        title="Imprimer facture"
+                      >
+                        <Printer className="h-4 w-4" />
                       </button>
                       <button 
                         onClick={() => onTransferStudent(student)}

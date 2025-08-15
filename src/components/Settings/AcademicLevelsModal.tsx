@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { X, BookOpen, Plus, Trash2, Edit } from 'lucide-react';
+import { X, BookOpen, Plus, Trash2, Edit, Upload } from 'lucide-react';
+import ImportButton from '../Import/ImportButton';
 
 interface AcademicLevelsModalProps {
   isOpen: boolean;
@@ -444,13 +445,19 @@ const AcademicLevelsModal: React.FC<AcademicLevelsModalProps> = ({
             <div className="space-y-6">
               <div className="flex items-center justify-between">
                 <h3 className="text-lg font-semibold text-gray-800">Matières Enseignées</h3>
-                <button
-                  onClick={() => setShowAddSubject(true)}
-                  className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors flex items-center space-x-2"
-                >
-                  <Plus className="h-4 w-4" />
-                  <span>Nouvelle Matière</span>
-                </button>
+                <div className="flex items-center space-x-2">
+                  <ImportButton 
+                    variant="secondary"
+                    size="sm"
+                  />
+                  <button
+                    onClick={() => setShowAddSubject(true)}
+                    className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors flex items-center space-x-2"
+                  >
+                    <Plus className="h-4 w-4" />
+                    <span>Nouvelle Matière</span>
+                  </button>
+                </div>
               </div>
 
               {/* Add Subject Form */}

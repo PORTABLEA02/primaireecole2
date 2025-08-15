@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { Clock, Wifi, WifiOff, AlertCircle, CheckCircle } from 'lucide-react';
 import { SessionUtils } from '../../utils/sessionUtils';
+import { useSessionSecurity } from '../../hooks/useSessionSecurity';
 
 const SessionIndicator: React.FC = () => {
   const [sessionInfo, setSessionInfo] = useState<any>(null);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const { isSessionValid, lastActivity } = useSessionSecurity();
 
   useEffect(() => {
     // Mettre à jour les informations de session toutes les 30 secondes
@@ -32,20 +34,21 @@ const SessionIndicator: React.FC = () => {
 
   const getStatusColor = () => {
     if (!isOnline) return 'text-red-600';
-    if (!sessionInfo || sessionInfo.status === 'error') return 'text-red-600';
+    if (!sessionInfo || sessionInfo.status === 'error' || !isSessionValid) return 'text-red-600';
     if (sessionInfo.needsRefresh) return 'text-yellow-600';
     return 'text-green-600';
   };
 
   const getStatusIcon = () => {
     if (!isOnline) return WifiOff;
-    if (!sessionInfo || sessionInfo.status === 'error') return AlertCircle;
+    if (!sessionInfo || sessionInfo.status === 'error' || !isSessionValid) return AlertCircle;
     if (sessionInfo.needsRefresh) return Clock;
     return CheckCircle;
   };
 
   const getStatusText = () => {
     if (!isOnline) return 'Hors ligne';
+    if (!isSessionValid) return 'Session inactive';
     if (!sessionInfo) return 'Vérification...';
     if (sessionInfo.status === 'error') return 'Erreur session';
     if (sessionInfo.status === 'no_session') return 'Pas de session';
@@ -61,10 +64,19 @@ const SessionIndicator: React.FC = () => {
     return `${hours}h${minutes % 60}m`;
   };
 
+  const getTimeSinceActivity = (): string => {
+    if (!lastActivity) return '';
+    const now = new Date();
+    const diffInSeconds = Math.floor((now.getTime() - lastActivity.getTime()) / 1000);
+    
+    if (diffInSeconds < 60) return 'Actif maintenant';
+    if (diffInSeconds < 3600) return `Actif il y a ${Math.floor(diffInSeconds / 60)}m`;
+    return `Actif il y a ${Math.floor(diffInSeconds / 3600)}h`;
+  };
   const StatusIcon = getStatusIcon();
 
   return (
-    <div className="flex items-center space-x-2 px-3 py-2 bg-gray-50 rounded-lg">
+    <div className="flex items-center space-x-2 px-3 py-2 bg-gray-50 rounded-lg cursor-pointer hover:bg-gray-100 transition-colors" title={`Dernière activité: ${getTimeSinceActivity()}`}>
       <StatusIcon className={`h-4 w-4 ${getStatusColor()}`} />
       <div className="text-xs">
         <div className={`font-medium ${getStatusColor()}`}>

@@ -13,10 +13,12 @@ import {
   Calendar
 } from 'lucide-react';
 import { useAuth } from '../Auth/AuthProvider';
+import { useRouter, RouteModule } from '../../contexts/RouterContext';
+import { useDataPreloader } from '../../hooks/useDataPreloader';
 
 interface SidebarProps {
-  activeModule: string;
-  onModuleChange: (module: string) => void;
+  activeModule: RouteModule;
+  onModuleChange: (module: RouteModule) => void;
   collapsed: boolean;
   onToggleCollapse: () => void;
   isMobile: boolean;
@@ -24,15 +26,15 @@ interface SidebarProps {
 
 const menuItems = [
   { id: 'dashboard', label: 'Tableau de Bord', icon: Home },
-  { id: 'enrollment', label: 'Inscription', icon: UserPlus },
   { id: 'students', label: 'Élèves', icon: Users },
   { id: 'classes', label: 'Classes & Niveaux', icon: GraduationCap },
   { id: 'finance', label: 'Gestion Financière', icon: DollarSign },
   { id: 'academic', label: 'Académique', icon: BookOpen },
   { id: 'teachers', label: 'Enseignants', icon: UserCheck },
   { id: 'schedule', label: 'Emploi du Temps', icon: Calendar },
+  { id: 'import', label: 'Import Excel', icon: UserPlus },
   { id: 'settings', label: 'Paramètres', icon: Settings },
-];
+] as const;
 
 const Sidebar: React.FC<SidebarProps> = ({
   activeModule,
@@ -41,20 +43,13 @@ const Sidebar: React.FC<SidebarProps> = ({
   onToggleCollapse,
   isMobile
 }) => {
-  const { user, userSchool, currentAcademicYear, hasPermission } = useAuth();
+  const { user, userSchool, currentAcademicYear } = useAuth();
+  const { canAccess } = useRouter();
+  const { preloadOnHover } = useDataPreloader();
 
   // Filtrer les éléments du menu selon les permissions
   const filteredMenuItems = menuItems.filter(item => {
-    if (item.id === 'dashboard') return true; // Dashboard accessible à tous
-    if (item.id === 'enrollment') return hasPermission('students');
-    if (item.id === 'students') return hasPermission('students');
-    if (item.id === 'classes') return hasPermission('classes');
-    if (item.id === 'finance') return hasPermission('finance');
-    if (item.id === 'academic') return hasPermission('academic');
-    if (item.id === 'teachers') return hasPermission('teachers');
-    if (item.id === 'schedule') return hasPermission('schedule');
-    if (item.id === 'settings') return hasPermission('settings') || hasPermission('all');
-    return false;
+    return canAccess(item.id as RouteModule);
   });
 
   return (
@@ -101,12 +96,13 @@ const Sidebar: React.FC<SidebarProps> = ({
       <nav className="mt-6">
         {filteredMenuItems.map((item) => {
           const Icon = item.icon;
-          const isActive = activeModule === item.id;
+          const isActive = activeModule === item.id as RouteModule;
           
           return (
             <button
               key={item.id}
-              onClick={() => onModuleChange(item.id)}
+              onClick={() => onModuleChange(item.id as RouteModule)}
+              onMouseEnter={() => preloadOnHover(item.id)}
               className={`w-full flex items-center px-4 py-3 text-left hover:bg-gray-50 transition-colors ${
                 isActive ? 'bg-blue-50 border-r-4 border-blue-600 text-blue-600' : 'text-gray-700'
               }`}

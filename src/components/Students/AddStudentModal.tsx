@@ -1,24 +1,26 @@
 import React, { useState, useEffect } from 'react';
-import { X, UserPlus, User, Calendar, Phone, Mail, MapPin, DollarSign, CreditCard } from 'lucide-react';
+import { X, User, Users, Phone, Mail, MapPin, Calendar, DollarSign, BookOpen, AlertCircle } from 'lucide-react';
 import { useAuth } from '../Auth/AuthProvider';
 import { StudentService } from '../../services/studentService';
 import { PaymentService } from '../../services/paymentService';
-import { FEES_BY_LEVEL, AGE_RANGES } from '../../utils/constants';
+import { supabase } from '../../lib/supabase';
 
 interface AddStudentModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onAddStudent: (studentData: StudentData, enrollmentData: EnrollmentData) => void;
+  onAddStudent: (studentData: any, enrollmentData: any) => void;
 }
 
-interface StudentData {
+interface NewStudentData {
   firstName: string;
   lastName: string;
   gender: 'Masculin' | 'Féminin';
-  dateOfBirth: string;
   nationality: string;
   birthPlace: string;
   religion?: string;
+  bloodType?: string;
+  allergies?: string;
+  previousSchool?: string;
   motherTongue: string;
   fatherName: string;
   fatherPhone: string;
@@ -26,26 +28,24 @@ interface StudentData {
   motherName: string;
   motherPhone: string;
   motherOccupation: string;
-  guardianType: string;
+  guardianType: 'Parents' | 'Tuteur' | 'Famille élargie' | 'Autre';
   numberOfSiblings: number;
-  transportMode: string;
+  transportMode: 'À pied' | 'Transport scolaire' | 'Transport familial' | 'Transport public';
+  medicalInfo?: string;
   emergencyContactName: string;
   emergencyContactPhone: string;
   emergencyContactRelation: string;
+  dateOfBirth: string;
   parentEmail: string;
   address: string;
-  medicalInfo?: string;
-  allergies?: string;
-  previousSchool?: string;
 }
 
 interface EnrollmentData {
   classId: string;
-  className: string;
   totalFees: number;
   initialPayment: number;
+  paymentMethodId: string;
   paymentType: 'Inscription' | 'Scolarité';
-  paymentMethod: string;
   mobileNumber?: string;
   bankDetails?: string;
   notes?: string;
@@ -57,21 +57,21 @@ const AddStudentModal: React.FC<AddStudentModalProps> = ({
   onAddStudent
 }) => {
   const { userSchool, currentAcademicYear } = useAuth();
-  const [step, setStep] = useState<'student' | 'enrollment' | 'payment' | 'confirmation'>('student');
-  const [loading, setLoading] = useState(false);
+  const [step, setStep] = useState<'student' | 'parent' | 'financial' | 'confirmation'>('student');
   const [availableClasses, setAvailableClasses] = useState<any[]>([]);
   const [paymentMethods, setPaymentMethods] = useState<any[]>([]);
   const [feeTypes, setFeeTypes] = useState<any[]>([]);
-
-  const [studentData, setStudentData] = useState<StudentData>({
+  const [studentData, setStudentData] = useState<NewStudentData>({
     firstName: '',
     lastName: '',
     gender: 'Masculin',
-    dateOfBirth: '',
     nationality: 'Béninoise',
     birthPlace: '',
     religion: '',
-    motherTongue: 'Fon',
+    bloodType: '',
+    allergies: '',
+    previousSchool: '',
+    motherTongue: 'Bambara',
     fatherName: '',
     fatherPhone: '',
     fatherOccupation: '',
@@ -81,88 +81,87 @@ const AddStudentModal: React.FC<AddStudentModalProps> = ({
     guardianType: 'Parents',
     numberOfSiblings: 0,
     transportMode: 'À pied',
+    medicalInfo: '',
     emergencyContactName: '',
     emergencyContactPhone: '',
-    emergencyContactRelation: 'Père',
+    emergencyContactRelation: '',
+    dateOfBirth: '',
     parentEmail: '',
-    address: '',
-    medicalInfo: '',
-    allergies: '',
-    previousSchool: ''
+    address: ''
   });
 
   const [enrollmentData, setEnrollmentData] = useState<EnrollmentData>({
     classId: '',
-    className: '',
     totalFees: 0,
     initialPayment: 0,
+    paymentMethodId: '',
     paymentType: 'Inscription',
-    paymentMethod: 'Espèces',
-    mobileNumber: '',
-    bankDetails: '',
     notes: ''
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  // Données spécifiques au Bénin
-  const nationalities = ['Béninoise', 'Nigériane', 'Togolaise', 'Burkinabè', 'Ivoirienne', 'Ghanéenne', 'Autre'];
-  const languages = ['Fon', 'Yoruba', 'Bariba', 'Dendi', 'Français', 'Autre'];
-  const religions = ['Christianisme', 'Islam', 'Vodoun', 'Autre', 'Non spécifié'];
-  const guardianTypes = ['Parents', 'Père seul', 'Mère seule', 'Grands-parents', 'Tuteur', 'Famille élargie'];
-  const transportModes = ['À pied', 'Vélo', 'Moto-taxi', 'Transport familial', 'Transport scolaire'];
-  const occupations = [
-    'Agriculteur', 'Commerçant', 'Artisan', 'Fonctionnaire', 'Enseignant', 'Chauffeur',
-    'Couturier/Couturière', 'Coiffeur/Coiffeuse', 'Mécanicien', 'Maçon', 'Ménagère',
-    'Vendeur/Vendeuse', 'Pêcheur', 'Éleveur', 'Autre'
-  ];
-
-  // Charger les données nécessaires
+  // Charger les classes disponibles
   useEffect(() => {
     if (isOpen && userSchool && currentAcademicYear) {
-      loadData();
+      loadAvailableClasses();
+      loadPaymentMethods();
+      loadFeeTypes();
     }
   }, [isOpen, userSchool, currentAcademicYear]);
 
-  const loadData = async () => {
+  const loadAvailableClasses = async () => {
     if (!userSchool || !currentAcademicYear) return;
 
     try {
-      setLoading(true);
-
-      const [classesData, methodsData, feesData] = await Promise.all([
-        StudentService.getAvailableClassesForEnrollment(userSchool.id, currentAcademicYear.id),
-        PaymentService.getPaymentMethods(userSchool.id),
-        loadFeeTypes()
-      ]);
-
-      setAvailableClasses(classesData);
-      setPaymentMethods(methodsData);
-      setFeeTypes(feesData);
-
+      const classes = await StudentService.getAvailableClassesForEnrollment(
+        userSchool.id,
+        currentAcademicYear.id
+      );
+      // Filter classes with available spots on the client side
+      const availableClasses = classes.filter(cls => cls.current_students < cls.capacity);
+      setAvailableClasses(availableClasses);
     } catch (error) {
-      console.error('Erreur lors du chargement des données:', error);
-    } finally {
-      setLoading(false);
+      console.error('Erreur lors du chargement des classes:', error);
+    }
+  };
+
+  const loadPaymentMethods = async () => {
+    if (!userSchool) return;
+
+    try {
+      const methods = await PaymentService.getPaymentMethods(userSchool.id);
+      setPaymentMethods(methods);
+      
+      // Sélectionner la première méthode par défaut
+      if (methods.length > 0) {
+        setEnrollmentData(prev => ({
+          ...prev,
+          paymentMethodId: methods[0].id
+        }));
+      }
+    } catch (error) {
+      console.error('Erreur lors du chargement des méthodes de paiement:', error);
     }
   };
 
   const loadFeeTypes = async () => {
-    if (!userSchool) return [];
+    if (!userSchool) return;
 
     try {
       const { data, error } = await supabase
         .from('fee_types')
         .select('*')
         .eq('school_id', userSchool.id)
-        .order('level')
         .order('name');
+       
 
       if (error) throw error;
-      return data || [];
+      setFeeTypes(data || []);
+      console.log(data);
+      
     } catch (error) {
       console.error('Erreur lors du chargement des types de frais:', error);
-      return [];
     }
   };
 
@@ -170,42 +169,60 @@ const AddStudentModal: React.FC<AddStudentModalProps> = ({
     const newErrors: Record<string, string> = {};
 
     if (currentStep === 'student') {
-      if (!studentData.firstName.trim()) newErrors.firstName = 'Le prénom est requis';
-      if (!studentData.lastName.trim()) newErrors.lastName = 'Le nom est requis';
-      if (!studentData.dateOfBirth) newErrors.dateOfBirth = 'La date de naissance est requise';
-      if (!studentData.parentEmail.trim()) newErrors.parentEmail = 'L\'email du parent est requis';
-      if (!studentData.address.trim()) newErrors.address = 'L\'adresse est requise';
+      if (!studentData.firstName.trim()) {
+        newErrors.firstName = 'Le prénom est requis';
+      }
+      if (!studentData.lastName.trim()) {
+        newErrors.lastName = 'Le nom est requis';
+      }
+      if (!studentData.birthPlace.trim()) {
+        newErrors.birthPlace = 'Le lieu de naissance est requis';
+      }
+      if (!studentData.dateOfBirth) {
+        newErrors.dateOfBirth = 'La date de naissance est requise';
+      }
+    }
+
+    if (currentStep === 'parent') {
+      if (!studentData.fatherName.trim() && !studentData.motherName.trim() && studentData.guardianType === 'Parents') {
+        newErrors.parentInfo = 'Au moins un parent doit être renseigné';
+      }
       if (!studentData.fatherPhone.trim() && !studentData.motherPhone.trim()) {
-        newErrors.parentPhone = 'Au moins un numéro de téléphone parent est requis';
+        newErrors.parentPhone = 'Au moins un numéro de téléphone est requis';
       }
-
-      // Validation de l'âge
-      if (studentData.dateOfBirth) {
-        const age = calculateAge(studentData.dateOfBirth);
-        if (age < 3 || age > 18) {
-          newErrors.dateOfBirth = 'L\'âge doit être entre 3 et 18 ans';
-        }
-      }
-
-      // Validation email
-      if (studentData.parentEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(studentData.parentEmail)) {
+      if (!studentData.parentEmail.trim()) {
+        newErrors.parentEmail = 'L\'email est requis';
+      } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(studentData.parentEmail)) {
         newErrors.parentEmail = 'Format d\'email invalide';
       }
+      if (!studentData.address.trim()) {
+        newErrors.address = 'L\'adresse est requise';
+      }
+      if (!studentData.emergencyContactName.trim()) {
+        newErrors.emergencyContactName = 'Le contact d\'urgence est requis';
+      }
+      if (!studentData.emergencyContactPhone.trim()) {
+        newErrors.emergencyContactPhone = 'Le téléphone du contact d\'urgence est requis';
+      }
     }
 
-    if (currentStep === 'enrollment') {
-      if (!enrollmentData.classId) newErrors.classId = 'Veuillez sélectionner une classe';
-    }
-
-    if (currentStep === 'payment') {
-      if (enrollmentData.initialPayment > 0) {
-        if (!enrollmentData.paymentMethod) newErrors.paymentMethod = 'Méthode de paiement requise';
-        if (enrollmentData.paymentMethod === 'MTN Mobile Money' || enrollmentData.paymentMethod === 'Moov Money') {
-          if (!enrollmentData.mobileNumber) newErrors.mobileNumber = 'Numéro de téléphone requis';
-        }
-        if (enrollmentData.paymentMethod === 'Virement Bancaire' && !enrollmentData.bankDetails) {
-          newErrors.bankDetails = 'Détails bancaires requis';
-        }
+    if (currentStep === 'financial') {
+      if (!enrollmentData.classId) {
+        newErrors.classId = 'Veuillez sélectionner une classe';
+      }
+      if (enrollmentData.initialPayment < 0) {
+        newErrors.initialPayment = 'Le montant ne peut pas être négatif';
+      }
+      if (enrollmentData.initialPayment > enrollmentData.totalFees) {
+        newErrors.initialPayment = 'Le paiement initial ne peut pas dépasser les frais totaux';
+      }
+      
+      const selectedMethod = paymentMethods.find(m => m.id === enrollmentData.paymentMethodId);
+      if (selectedMethod?.type === 'mobile' && !enrollmentData.mobileNumber) {
+        newErrors.mobileNumber = 'Numéro de téléphone requis pour Mobile Money';
+      }
+      if (selectedMethod?.type === 'bank' && !enrollmentData.bankDetails) {
+        newErrors.bankDetails = 'Détails bancaires requis pour le virement';
       }
     }
 
@@ -215,21 +232,50 @@ const AddStudentModal: React.FC<AddStudentModalProps> = ({
 
   const handleNext = () => {
     if (validateStep(step)) {
-      if (step === 'student') setStep('enrollment');
-      else if (step === 'enrollment') setStep('payment');
-      else if (step === 'payment') setStep('confirmation');
+      switch (step) {
+        case 'student':
+          setStep('parent');
+          break;
+        case 'parent':
+          setStep('financial');
+          break;
+        case 'financial':
+          setStep('confirmation');
+          break;
+      }
     }
   };
 
   const handleBack = () => {
-    if (step === 'enrollment') setStep('student');
-    else if (step === 'payment') setStep('enrollment');
-    else if (step === 'confirmation') setStep('payment');
+    switch (step) {
+      case 'parent':
+        setStep('student');
+        break;
+      case 'financial':
+        setStep('parent');
+        break;
+      case 'confirmation':
+        setStep('financial');
+        break;
+    }
   };
 
   const handleSubmit = () => {
-    if (validateStep('payment')) {
-      onAddStudent(studentData, enrollmentData);
+    if (validateStep('financial')) {
+      // Préparer les données complètes pour l'inscription avec paiement
+      const completeStudentData = {
+        ...studentData,
+        schoolId: userSchool?.id
+      };
+      
+      const completeEnrollmentData = {
+        ...enrollmentData,
+        schoolId: userSchool?.id,
+        academicYearId: currentAcademicYear?.id,
+        enrollmentDate: new Date().toISOString().split('T')[0]
+      };
+      
+      onAddStudent(completeStudentData, completeEnrollmentData);
       handleClose();
     }
   };
@@ -240,11 +286,13 @@ const AddStudentModal: React.FC<AddStudentModalProps> = ({
       firstName: '',
       lastName: '',
       gender: 'Masculin',
-      dateOfBirth: '',
-      nationality: 'Béninoise',
+      nationality: 'Malienne',
       birthPlace: '',
       religion: '',
-      motherTongue: 'Fon',
+      bloodType: '',
+      allergies: '',
+      previousSchool: '',
+      motherTongue: 'Bambara',
       fatherName: '',
       fatherPhone: '',
       fatherOccupation: '',
@@ -254,60 +302,133 @@ const AddStudentModal: React.FC<AddStudentModalProps> = ({
       guardianType: 'Parents',
       numberOfSiblings: 0,
       transportMode: 'À pied',
+      medicalInfo: '',
       emergencyContactName: '',
       emergencyContactPhone: '',
-      emergencyContactRelation: 'Père',
+      emergencyContactRelation: '',
+      dateOfBirth: '',
       parentEmail: '',
-      address: '',
-      medicalInfo: '',
-      allergies: '',
-      previousSchool: ''
+      address: ''
     });
     setEnrollmentData({
       classId: '',
-      className: '',
       totalFees: 0,
       initialPayment: 0,
+      paymentMethodId: '',
       paymentType: 'Inscription',
-      paymentMethod: 'Espèces',
-      mobileNumber: '',
-      bankDetails: '',
       notes: ''
     });
     setErrors({});
     onClose();
   };
 
-  const calculateAge = (birthDate: string) => {
-    const today = new Date();
-    const birth = new Date(birthDate);
-    let age = today.getFullYear() - birth.getFullYear();
-    const monthDiff = today.getMonth() - birth.getMonth();
-    
-    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) {
-      age--;
-    }
-    
-    return age;
-  };
+  const handleClassChange = (classId: string) => {
+        
 
-  const handleClassSelect = (classId: string) => {
     const selectedClass = availableClasses.find(c => c.id === classId);
     if (selectedClass) {
-      // Calculer les frais selon le niveau
-      const levelFees = feeTypes.filter(fee => 
-        fee.level === selectedClass.level || fee.level === 'Tous'
-      );
-      const totalFees = levelFees.reduce((sum, fee) => sum + fee.amount, 0);
-
       setEnrollmentData(prev => ({
         ...prev,
-        classId,
-        className: selectedClass.name,
-        totalFees
+        classId: classId
       }));
+       
     }
   };
+
+  const handlePaymentTypeChange = (paymentType: 'Inscription' | 'Scolarité') => {
+    // Trouver le type de frais correspondant
+    const selectedClass = availableClasses.find(c => c.id === enrollmentData.classId);
+    if (!selectedClass) return;
+
+    let feeAmount = 0;
+    
+    if (paymentType === 'Inscription') {
+      // Chercher les frais d'inscription
+        
+
+      const inscriptionFee = feeTypes.find(f => 
+        f.name.toLowerCase().includes('inscription') && 
+        (f.level.toLowerCase() === selectedClass.level.toLowerCase())
+      );
+       
+      feeAmount = inscriptionFee?.amount || 50000; // Valeur par défaut
+      
+    } else {
+      // Chercher les frais de scolarité pour ce niveau
+      const scolariteFee = feeTypes.find(f => 
+        f.name.toLowerCase().includes('scolarité') && 
+        f.level.toLowerCase() === selectedClass.level.toLowerCase()
+      );
+      feeAmount = scolariteFee?.amount || 350000; // Valeur par défaut
+    }
+    console.log(feeAmount);
+
+    setEnrollmentData(prev => ({
+      ...prev,
+      paymentType,
+      totalFees: feeAmount,
+      initialPayment: feeAmount // Reset le paiement initial
+        
+    }));
+  };
+
+  const handlePaymentMethodChange = (methodId: string) => {
+    setEnrollmentData(prev => ({
+      ...prev,
+      paymentMethodId: methodId,
+      mobileNumber: '',
+      bankDetails: ''
+    }));
+
+  };
+
+  const getPaymentMethodIcon = (type: string) => {
+    switch (type) {
+      case 'cash': return DollarSign;
+      case 'mobile': return Phone;
+      case 'bank': return BookOpen;
+      default: return DollarSign;
+    }
+  };
+
+  const getPaymentMethodColor = (type: string) => {
+    switch (type) {
+      case 'cash': return 'green';
+      case 'mobile': return 'blue';
+      case 'bank': return 'purple';
+      default: return 'gray';
+    }
+  };
+
+  const calculateAge = (birthDate: string) => {
+    if (!birthDate) return '';
+    return StudentService.calculateAge(birthDate).toString();
+  };
+
+  // Listes de données
+  const nationalities = [
+    'Malienne', 'Burkinabè', 'Ivoirienne', 'Sénégalaise', 'Guinéenne', 
+    'Nigérienne', 'Ghanéenne', 'Togolaise', 'Béninoise', 'Mauritanienne', 'Autre'
+  ];
+
+  const languages = [
+    'Bambara', 'Peul', 'Soninké', 'Dogon', 'Malinké', 'Sonrhaï', 
+    'Tamasheq', 'Bobo', 'Sénoufo', 'Français', 'Autre'
+  ];
+
+  const religions = [
+    'Islam', 'Christianisme', 'Animisme', 'Autre', 'Non spécifié'
+  ];
+
+  const bloodTypes = [
+    'A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-', 'Non déterminé'
+  ];
+
+  const occupations = [
+    'Agriculteur/Agricultrice', 'Commerçant(e)', 'Fonctionnaire', 'Enseignant(e)', 
+    'Artisan(e)', 'Chauffeur', 'Ménagère', 'Ouvrier/Ouvrière', 'Cadre', 
+    'Professionnel libéral', 'Étudiant(e)', 'Sans emploi', 'Autre'
+  ];
 
   if (!isOpen) return null;
 
@@ -319,15 +440,15 @@ const AddStudentModal: React.FC<AddStudentModalProps> = ({
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-3">
               <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
-                <UserPlus className="h-5 w-5 text-blue-600" />
+                <User className="h-5 w-5 text-blue-600" />
               </div>
               <div>
                 <h2 className="text-xl font-bold text-gray-800">Nouvel Élève</h2>
                 <p className="text-gray-600">
-                  {step === 'student' && 'Informations personnelles'}
-                  {step === 'enrollment' && 'Inscription en classe'}
-                  {step === 'payment' && 'Paiement initial'}
-                  {step === 'confirmation' && 'Confirmation'}
+                  {step === 'student' && 'Informations de l\'élève'}
+                  {step === 'parent' && 'Informations du parent/tuteur'}
+                  {step === 'financial' && 'Informations financières'}
+                  {step === 'confirmation' && 'Confirmation d\'inscription'}
                 </p>
               </div>
             </div>
@@ -340,23 +461,23 @@ const AddStudentModal: React.FC<AddStudentModalProps> = ({
           </div>
 
           {/* Progress Steps */}
-          <div className="flex items-center space-x-4 mt-6">
-            <div className={`flex items-center space-x-2 ${step === 'student' ? 'text-blue-600' : ['enrollment', 'payment', 'confirmation'].includes(step) ? 'text-green-600' : 'text-gray-400'}`}>
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${step === 'student' ? 'bg-blue-100' : ['enrollment', 'payment', 'confirmation'].includes(step) ? 'bg-green-100' : 'bg-gray-100'}`}>
+          <div className="flex items-center mt-6 space-x-4">
+            <div className={`flex items-center space-x-2 ${step === 'student' ? 'text-blue-600' : ['parent', 'financial', 'confirmation'].includes(step) ? 'text-green-600' : 'text-gray-400'}`}>
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${step === 'student' ? 'bg-blue-100' : ['parent', 'financial', 'confirmation'].includes(step) ? 'bg-green-100' : 'bg-gray-100'}`}>
                 1
               </div>
               <span className="text-sm font-medium">Élève</span>
             </div>
             <div className="flex-1 h-px bg-gray-200"></div>
-            <div className={`flex items-center space-x-2 ${step === 'enrollment' ? 'text-blue-600' : ['payment', 'confirmation'].includes(step) ? 'text-green-600' : 'text-gray-400'}`}>
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${step === 'enrollment' ? 'bg-blue-100' : ['payment', 'confirmation'].includes(step) ? 'bg-green-100' : 'bg-gray-100'}`}>
+            <div className={`flex items-center space-x-2 ${step === 'parent' ? 'text-blue-600' : ['financial', 'confirmation'].includes(step) ? 'text-green-600' : 'text-gray-400'}`}>
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${step === 'parent' ? 'bg-blue-100' : ['financial', 'confirmation'].includes(step) ? 'bg-green-100' : 'bg-gray-100'}`}>
                 2
               </div>
-              <span className="text-sm font-medium">Inscription</span>
+              <span className="text-sm font-medium">Parent</span>
             </div>
             <div className="flex-1 h-px bg-gray-200"></div>
-            <div className={`flex items-center space-x-2 ${step === 'payment' ? 'text-blue-600' : step === 'confirmation' ? 'text-green-600' : 'text-gray-400'}`}>
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${step === 'payment' ? 'bg-blue-100' : step === 'confirmation' ? 'bg-green-100' : 'bg-gray-100'}`}>
+            <div className={`flex items-center space-x-2 ${step === 'financial' ? 'text-blue-600' : step === 'confirmation' ? 'text-green-600' : 'text-gray-400'}`}>
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${step === 'financial' ? 'bg-blue-100' : step === 'confirmation' ? 'bg-green-100' : 'bg-gray-100'}`}>
                 3
               </div>
               <span className="text-sm font-medium">Paiement</span>
@@ -371,14 +492,12 @@ const AddStudentModal: React.FC<AddStudentModalProps> = ({
           </div>
         </div>
 
+        {/* Content */}
         <div className="p-6">
           {/* Step 1: Student Information */}
           {step === 'student' && (
             <div className="space-y-6">
-              <h3 className="text-lg font-semibold text-gray-800">Informations de l'Élève</h3>
-              
-              {/* Informations de base */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Prénom *
@@ -410,7 +529,7 @@ const AddStudentModal: React.FC<AddStudentModalProps> = ({
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Sexe *
@@ -425,6 +544,38 @@ const AddStudentModal: React.FC<AddStudentModalProps> = ({
                   </select>
                 </div>
 
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Nationalité *
+                  </label>
+                  <select
+                    value={studentData.nationality}
+                    onChange={(e) => setStudentData(prev => ({ ...prev, nationality: e.target.value }))}
+                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  >
+                    {nationalities.map(nationality => (
+                      <option key={nationality} value={nationality}>{nationality}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Langue Maternelle *
+                  </label>
+                  <select
+                    value={studentData.motherTongue}
+                    onChange={(e) => setStudentData(prev => ({ ...prev, motherTongue: e.target.value }))}
+                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  >
+                    {languages.map(language => (
+                      <option key={language} value={language}>{language}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Date de Naissance *
@@ -445,211 +596,224 @@ const AddStudentModal: React.FC<AddStudentModalProps> = ({
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Nationalité
-                  </label>
-                  <select
-                    value={studentData.nationality}
-                    onChange={(e) => setStudentData(prev => ({ ...prev, nationality: e.target.value }))}
-                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  >
-                    {nationalities.map(nat => (
-                      <option key={nat} value={nat}>{nat}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Lieu de Naissance
+                    Lieu de Naissance *
                   </label>
                   <input
                     type="text"
                     value={studentData.birthPlace}
                     onChange={(e) => setStudentData(prev => ({ ...prev, birthPlace: e.target.value }))}
-                    placeholder="Ex: Cotonou, Porto-Novo..."
-                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="Ville, Région, Pays"
+                    className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                      errors.birthPlace ? 'border-red-300' : 'border-gray-200'
+                    }`}
                   />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Langue Maternelle
-                  </label>
-                  <select
-                    value={studentData.motherTongue}
-                    onChange={(e) => setStudentData(prev => ({ ...prev, motherTongue: e.target.value }))}
-                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  >
-                    {languages.map(lang => (
-                      <option key={lang} value={lang}>{lang}</option>
-                    ))}
-                  </select>
+                  {errors.birthPlace && <p className="text-red-500 text-sm mt-1">{errors.birthPlace}</p>}
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Informations optionnelles */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Religion
+                    Religion (Optionnel)
                   </label>
                   <select
-                    value={studentData.religion}
+                    value={studentData.religion || ''}
                     onChange={(e) => setStudentData(prev => ({ ...prev, religion: e.target.value }))}
                     className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   >
                     <option value="">Sélectionner</option>
-                    {religions.map(rel => (
-                      <option key={rel} value={rel}>{rel}</option>
+                    {religions.map(religion => (
+                      <option key={religion} value={religion}>{religion}</option>
                     ))}
                   </select>
                 </div>
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Mode de Transport
+                    Groupe Sanguin (Optionnel)
                   </label>
                   <select
-                    value={studentData.transportMode}
-                    onChange={(e) => setStudentData(prev => ({ ...prev, transportMode: e.target.value }))}
+                    value={studentData.bloodType || ''}
+                    onChange={(e) => setStudentData(prev => ({ ...prev, bloodType: e.target.value }))}
                     className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   >
-                    {transportModes.map(mode => (
-                      <option key={mode} value={mode}>{mode}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              {/* Contact famille */}
-              <div className="p-4 bg-blue-50 rounded-lg">
-                <h4 className="font-medium text-blue-800 mb-3">Contact Famille</h4>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {/* Père */}
-                  <div className="space-y-3">
-                    <h5 className="font-medium text-blue-700">Père</h5>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Nom complet</label>
-                      <input
-                        type="text"
-                        value={studentData.fatherName}
-                        onChange={(e) => setStudentData(prev => ({ ...prev, fatherName: e.target.value }))}
-                        className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Téléphone</label>
-                      <input
-                        type="tel"
-                        value={studentData.fatherPhone}
-                        onChange={(e) => setStudentData(prev => ({ ...prev, fatherPhone: e.target.value }))}
-                        placeholder="+229 XX XX XX XX"
-                        className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Profession</label>
-                      <select
-                        value={studentData.fatherOccupation}
-                        onChange={(e) => setStudentData(prev => ({ ...prev, fatherOccupation: e.target.value }))}
-                        className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      >
-                        <option value="">Sélectionner</option>
-                        {occupations.map(occ => (
-                          <option key={occ} value={occ}>{occ}</option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-
-                  {/* Mère */}
-                  <div className="space-y-3">
-                    <h5 className="font-medium text-pink-700">Mère</h5>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Nom complet</label>
-                      <input
-                        type="text"
-                        value={studentData.motherName}
-                        onChange={(e) => setStudentData(prev => ({ ...prev, motherName: e.target.value }))}
-                        className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Téléphone</label>
-                      <input
-                        type="tel"
-                        value={studentData.motherPhone}
-                        onChange={(e) => setStudentData(prev => ({ ...prev, motherPhone: e.target.value }))}
-                        placeholder="+229 XX XX XX XX"
-                        className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Profession</label>
-                      <select
-                        value={studentData.motherOccupation}
-                        onChange={(e) => setStudentData(prev => ({ ...prev, motherOccupation: e.target.value }))}
-                        className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      >
-                        <option value="">Sélectionner</option>
-                        {occupations.map(occ => (
-                          <option key={occ} value={occ}>{occ}</option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-                </div>
-
-                {errors.parentPhone && (
-                  <p className="text-red-500 text-sm mt-2">{errors.parentPhone}</p>
-                )}
-              </div>
-
-              {/* Contact principal */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    <Mail className="h-4 w-4 inline mr-1" />
-                    Email Principal *
-                  </label>
-                  <input
-                    type="email"
-                    value={studentData.parentEmail}
-                    onChange={(e) => setStudentData(prev => ({ ...prev, parentEmail: e.target.value }))}
-                    className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                      errors.parentEmail ? 'border-red-300' : 'border-gray-200'
-                    }`}
-                  />
-                  {errors.parentEmail && <p className="text-red-500 text-sm mt-1">{errors.parentEmail}</p>}
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Type de Tuteur
-                  </label>
-                  <select
-                    value={studentData.guardianType}
-                    onChange={(e) => setStudentData(prev => ({ ...prev, guardianType: e.target.value }))}
-                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  >
-                    {guardianTypes.map(type => (
+                    <option value="">Sélectionner</option>
+                    {bloodTypes.map(type => (
                       <option key={type} value={type}>{type}</option>
                     ))}
                   </select>
                 </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Nombre de Frères/Sœurs
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="20"
+                    value={studentData.numberOfSiblings}
+                    onChange={(e) => setStudentData(prev => ({ ...prev, numberOfSiblings: parseInt(e.target.value) || 0 }))}
+                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Step 2: Parent Information */}
+          {step === 'parent' && (
+            <div className="space-y-6">
+              {/* Type de tuteur */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Type de Tuteur *
+                </label>
+                <select
+                  value={studentData.guardianType}
+                  onChange={(e) => setStudentData(prev => ({ ...prev, guardianType: e.target.value as any }))}
+                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  <option value="Parents">Parents</option>
+                  <option value="Tuteur">Tuteur légal</option>
+                  <option value="Famille élargie">Famille élargie</option>
+                  <option value="Autre">Autre</option>
+                </select>
+              </div>
+
+              {/* Informations du père */}
+              <div className="p-4 bg-blue-50 rounded-lg">
+                <h4 className="font-medium text-blue-800 mb-4">Informations du Père</h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Nom Complet
+                    </label>
+                    <input
+                      type="text"
+                      value={studentData.fatherName}
+                      onChange={(e) => setStudentData(prev => ({ ...prev, fatherName: e.target.value }))}
+                      className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Téléphone
+                    </label>
+                    <input
+                      type="tel"
+                      value={studentData.fatherPhone}
+                      onChange={(e) => setStudentData(prev => ({ ...prev, fatherPhone: e.target.value }))}
+                      placeholder="+229 XX XX XX XX"
+                      className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Profession
+                    </label>
+                    <select
+                      value={studentData.fatherOccupation}
+                      onChange={(e) => setStudentData(prev => ({ ...prev, fatherOccupation: e.target.value }))}
+                      className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    >
+                      <option value="">Sélectionner une profession</option>
+                      {occupations.map(occupation => (
+                        <option key={occupation} value={occupation}>{occupation}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* Informations de la mère */}
+              <div className="p-4 bg-pink-50 rounded-lg">
+                <h4 className="font-medium text-pink-800 mb-4">Informations de la Mère</h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Nom Complet
+                    </label>
+                    <input
+                      type="text"
+                      value={studentData.motherName}
+                      onChange={(e) => setStudentData(prev => ({ ...prev, motherName: e.target.value }))}
+                      className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Téléphone
+                    </label>
+                    <input
+                      type="tel"
+                      value={studentData.motherPhone}
+                      onChange={(e) => setStudentData(prev => ({ ...prev, motherPhone: e.target.value }))}
+                      placeholder="+229 XX XX XX XX"
+                      className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Profession
+                    </label>
+                    <select
+                      value={studentData.motherOccupation}
+                      onChange={(e) => setStudentData(prev => ({ ...prev, motherOccupation: e.target.value }))}
+                      className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    >
+                      <option value="">Sélectionner une profession</option>
+                      {occupations.map(occupation => (
+                        <option key={occupation} value={occupation}>{occupation}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {errors.parentInfo && (
+                <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+                  <p className="text-red-700 text-sm">{errors.parentInfo}</p>
+                </div>
+              )}
+              {errors.parentPhone && (
+                <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+                  <p className="text-red-700 text-sm">{errors.parentPhone}</p>
+                </div>
+              )}
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <Mail className="h-4 w-4 inline mr-1" />
+                  Email Principal de Contact *
+                </label>
+                <input
+                  type="email"
+                  value={studentData.parentEmail}
+                  onChange={(e) => setStudentData(prev => ({ ...prev, parentEmail: e.target.value }))}
+                  placeholder="Email pour les communications officielles"
+                  className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                    errors.parentEmail ? 'border-red-300' : 'border-gray-200'
+                  }`}
+                />
+                {errors.parentEmail && <p className="text-red-500 text-sm mt-1">{errors.parentEmail}</p>}
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   <MapPin className="h-4 w-4 inline mr-1" />
-                  Adresse Complète *
+                  Adresse Familiale *
                 </label>
                 <textarea
                   value={studentData.address}
                   onChange={(e) => setStudentData(prev => ({ ...prev, address: e.target.value }))}
+                  placeholder="Adresse complète : quartier, rue, ville, région"
                   rows={3}
-                  placeholder="Quartier, rue, ville..."
                   className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
                     errors.address ? 'border-red-300' : 'border-gray-200'
                   }`}
@@ -659,270 +823,288 @@ const AddStudentModal: React.FC<AddStudentModalProps> = ({
 
               {/* Contact d'urgence */}
               <div className="p-4 bg-red-50 rounded-lg">
-                <h4 className="font-medium text-red-800 mb-3">Contact d'Urgence</h4>
+                <h4 className="font-medium text-red-800 mb-4">Contact d'Urgence</h4>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Nom</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Nom Complet *
+                    </label>
                     <input
                       type="text"
                       value={studentData.emergencyContactName}
                       onChange={(e) => setStudentData(prev => ({ ...prev, emergencyContactName: e.target.value }))}
-                      className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                        errors.emergencyContactName ? 'border-red-300' : 'border-gray-200'
+                      }`}
                     />
+                    {errors.emergencyContactName && <p className="text-red-500 text-sm mt-1">{errors.emergencyContactName}</p>}
                   </div>
+
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Téléphone</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Téléphone *
+                    </label>
                     <input
                       type="tel"
                       value={studentData.emergencyContactPhone}
                       onChange={(e) => setStudentData(prev => ({ ...prev, emergencyContactPhone: e.target.value }))}
-                      className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      placeholder="+229 01 XX XX XX XX"
+                      className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                        errors.emergencyContactPhone ? 'border-red-300' : 'border-gray-200'
+                      }`}
                     />
+                    {errors.emergencyContactPhone && <p className="text-red-500 text-sm mt-1">{errors.emergencyContactPhone}</p>}
                   </div>
+
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Relation</label>
-                    <select
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Lien de Parenté *
+                    </label>
+                    <input
+                      type="text"
                       value={studentData.emergencyContactRelation}
                       onChange={(e) => setStudentData(prev => ({ ...prev, emergencyContactRelation: e.target.value }))}
-                      className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    >
-                      <option value="Père">Père</option>
-                      <option value="Mère">Mère</option>
-                      <option value="Grand-parent">Grand-parent</option>
-                      <option value="Oncle/Tante">Oncle/Tante</option>
-                      <option value="Tuteur">Tuteur</option>
-                      <option value="Autre">Autre</option>
-                    </select>
+                      placeholder="Ex: Oncle, Tante, Grand-mère..."
+                      className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
                   </div>
                 </div>
               </div>
             </div>
           )}
 
-          {/* Step 2: Class Enrollment */}
-          {step === 'enrollment' && (
+          {/* Step 3: Financial Information */}
+          {step === 'financial' && (
             <div className="space-y-6">
-              <h3 className="text-lg font-semibold text-gray-800">Inscription en Classe</h3>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {availableClasses.map((classItem) => {
-                  const isSelected = enrollmentData.classId === classItem.id;
-                  const availablePlaces = classItem.capacity - classItem.current_students;
-                  const isFull = availablePlaces <= 0;
-                  
-                  return (
-                    <div
-                      key={classItem.id}
-                      onClick={() => !isFull && handleClassSelect(classItem.id)}
-                      className={`p-4 border-2 rounded-lg transition-all ${
-                        isFull 
-                          ? 'border-gray-200 bg-gray-50 cursor-not-allowed opacity-60'
-                          : isSelected
-                            ? 'border-green-500 bg-green-50 cursor-pointer'
-                            : 'border-gray-200 hover:border-green-300 hover:bg-green-50 cursor-pointer'
-                      }`}
-                    >
-                      <div className="flex items-start justify-between mb-3">
-                        <div>
-                          <h4 className="font-medium text-gray-800">{classItem.name}</h4>
-                          <p className="text-sm text-gray-600">{classItem.level}</p>
+              {/* Sélection de la classe */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Classe *
+                </label>
+                <select
+                  value={enrollmentData.classId}
+                  onChange={(e) => handleClassChange(e.target.value)}
+                  className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                    errors.classId ? 'border-red-300' : 'border-gray-200'
+                  }`}
+                >
+                  <option value="">Sélectionner une classe</option>
+                  {availableClasses.map(cls => (
+                    <option key={cls.id} value={cls.id}>
+                      {cls.name} ({cls.level}) - {cls.capacity - cls.current_students} places libres
+                    </option>
+                  ))}
+                </select>
+                {errors.classId && <p className="text-red-500 text-sm mt-1">{errors.classId}</p>}
+              </div>
+
+              {/* Type de paiement */}
+              {enrollmentData.classId && (
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-3">
+                      Type de Frais à Payer *
+                    </label>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div
+                        onClick={() => handlePaymentTypeChange('Inscription')}
+                        className={`p-4 border-2 rounded-lg cursor-pointer transition-all ${
+                          enrollmentData.paymentType === 'Inscription'
+                            ? 'border-blue-500 bg-blue-50'
+                            : 'border-gray-200 hover:border-blue-300'
+                        }`}
+                      >
+                        <div className="flex items-center space-x-3">
+                          <User className={`h-5 w-5 ${
+                            enrollmentData.paymentType === 'Inscription' ? 'text-blue-600' : 'text-gray-400'
+                          }`} />
+                          <div>
+                            <h4 className={`font-medium ${
+                              enrollmentData.paymentType === 'Inscription' ? 'text-blue-800' : 'text-gray-700'
+                            }`}>
+                              Frais d'Inscription
+                            </h4>
+                            <p className="text-sm text-gray-600">
+                            {(() => {
+                                const selectedClass = availableClasses.find(c => c.id === enrollmentData.classId);
+                                const scolariteFee = feeTypes.find(f => 
+                                  f.name.toLowerCase().includes('inscription') && 
+                                  f.level.toLowerCase() === selectedClass?.level.toLowerCase()
+                                );
+                                return scolariteFee?.amount.toLocaleString() || '5,000';
+                              })()} FCFA
+                              </p>
+                            <p className="text-xs text-gray-500">Paiement unique à l'inscription</p>
+                          </div>
                         </div>
-                        {isFull && (
-                          <span className="px-2 py-1 bg-red-100 text-red-700 rounded text-xs font-medium">
-                            Complète
-                          </span>
-                        )}
                       </div>
-                      
-                      <div className="space-y-2 text-sm">
-                        <div className="flex justify-between">
-                          <span className="text-gray-600">Enseignant:</span>
-                          <span className="font-medium">
-                            {classItem.teacher_assignment?.teacher 
-                              ? `${classItem.teacher_assignment.teacher.first_name} ${classItem.teacher_assignment.teacher.last_name}`
-                              : 'Non assigné'
-                            }
-                          </span>
+
+                      <div
+                        onClick={() => handlePaymentTypeChange('Scolarité')}
+                        className={`p-4 border-2 rounded-lg cursor-pointer transition-all ${
+                          enrollmentData.paymentType === 'Scolarité'
+                            ? 'border-green-500 bg-green-50'
+                            : 'border-gray-200 hover:border-green-300'
+                        }`}
+                      >
+                        <div className="flex items-center space-x-3">
+                          <BookOpen className={`h-5 w-5 ${
+                            enrollmentData.paymentType === 'Scolarité' ? 'text-green-600' : 'text-gray-400'
+                          }`} />
+                          <div>
+                            <h4 className={`font-medium ${
+                              enrollmentData.paymentType === 'Scolarité' ? 'text-green-800' : 'text-gray-700'
+                            }`}>
+                              Frais de Scolarité
+                            </h4>
+                            <p className="text-sm text-gray-600">
+                              {(() => {
+                                const selectedClass = availableClasses.find(c => c.id === enrollmentData.classId);
+                                const scolariteFee = feeTypes.find(f => 
+                                  f.name.toLowerCase().includes('scolarité') && 
+                                  f.level.toLowerCase() === selectedClass?.level.toLowerCase()
+                                );
+                                return scolariteFee?.amount.toLocaleString() || '350,000';
+                              })()} FCFA
+                            </p>
+                            <p className="text-xs text-gray-500">Frais annuels de scolarité</p>
+                          </div>
                         </div>
-                        <div className="flex justify-between">
-                          <span className="text-gray-600">Places:</span>
-                          <span className={`font-medium ${availablePlaces > 5 ? 'text-green-600' : availablePlaces > 0 ? 'text-yellow-600' : 'text-red-600'}`}>
-                            {availablePlaces} disponibles
-                          </span>
-                        </div>
-                      </div>
-                      
-                      <div className="mt-3">
-                        <div className="w-full bg-gray-200 rounded-full h-2">
-                          <div 
-                            className={`h-2 rounded-full ${
-                              (classItem.current_students / classItem.capacity) >= 0.9 ? 'bg-red-500' :
-                              (classItem.current_students / classItem.capacity) >= 0.75 ? 'bg-yellow-500' : 'bg-green-500'
-                            }`}
-                            style={{ width: `${(classItem.current_students / classItem.capacity) * 100}%` }}
-                          ></div>
-                        </div>
-                        <p className="text-xs text-gray-500 mt-1">
-                          {classItem.current_students}/{classItem.capacity} élèves
-                        </p>
                       </div>
                     </div>
-                  );
-                })}
-              </div>
+                  </div>
 
-              {errors.classId && (
-                <p className="text-red-500 text-sm">{errors.classId}</p>
-              )}
-
-              {enrollmentData.classId && (
-                <div className="p-4 bg-green-50 rounded-lg border border-green-200">
-                  <h4 className="font-medium text-green-800 mb-2">Classe Sélectionnée</h4>
-                  <div className="text-sm text-green-700">
-                    <p><strong>Classe:</strong> {enrollmentData.className}</p>
-                    <p><strong>Frais totaux:</strong> {enrollmentData.totalFees.toLocaleString()} FCFA</p>
+                  {/* Affichage des frais sélectionnés */}
+                  <div className="p-4 bg-gray-50 rounded-lg">
+                    <h4 className="font-medium text-gray-800 mb-2">
+                      Frais Sélectionnés: {enrollmentData.paymentType}
+                    </h4>
+                    <div className="text-sm text-gray-700 space-y-1">
+                      <p><strong>Montant total:</strong> {enrollmentData.totalFees.toLocaleString()} FCFA</p>
+                      {enrollmentData.paymentType === 'Scolarité' && (
+                        <p className="text-xs text-gray-600">
+                          Note: Les frais de scolarité peuvent être payés en plusieurs tranches
+                        </p>
+                      )}
+                      {enrollmentData.paymentType === 'Inscription' && (
+                        <p className="text-xs text-gray-600">
+                          Note: Les frais d'inscription sont généralement payés en une seule fois
+                        </p>
+                      )}
+                    </div>
                   </div>
                 </div>
               )}
-            </div>
-          )}
 
-          {/* Step 3: Payment */}
-          {step === 'payment' && (
-            <div className="space-y-6">
-              <h3 className="text-lg font-semibold text-gray-800">Paiement Initial (Optionnel)</h3>
-              
-              <div className="p-4 bg-blue-50 rounded-lg">
-                <h4 className="font-medium text-blue-800 mb-2">Frais de Scolarité</h4>
-                <p className="text-sm text-blue-700">
-                  Total à payer pour {enrollmentData.className}: <strong>{enrollmentData.totalFees.toLocaleString()} FCFA</strong>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Paiement Initial (FCFA)
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  max={enrollmentData.totalFees}
+                  value={enrollmentData.initialPayment}
+                  onChange={(e) => setEnrollmentData(prev => ({ ...prev, initialPayment: parseInt(e.target.value) || 0 }))}
+                  className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                    errors.initialPayment ? 'border-red-300' : 'border-gray-200'
+                  }`}
+                />
+                {errors.initialPayment && <p className="text-red-500 text-sm mt-1">{errors.initialPayment}</p>}
+                <p className="text-sm text-gray-500 mt-1">
+                  Solde restant: {(enrollmentData.totalFees - enrollmentData.initialPayment).toLocaleString()} FCFA
                 </p>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Type de Paiement
-                  </label>
-                  <select
-                    value={enrollmentData.paymentType}
-                    onChange={(e) => setEnrollmentData(prev => ({ ...prev, paymentType: e.target.value as any }))}
-                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  >
-                    <option value="Inscription">Frais d'inscription</option>
-                    <option value="Scolarité">Acompte scolarité</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Montant (FCFA)
-                  </label>
-                  <input
-                    type="number"
-                    min="0"
-                    max={enrollmentData.totalFees}
-                    step="1000"
-                    value={enrollmentData.initialPayment}
-                    onChange={(e) => setEnrollmentData(prev => ({ ...prev, initialPayment: parseInt(e.target.value) || 0 }))}
-                    className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
-                  <p className="text-sm text-gray-500 mt-1">
-                    Laisser à 0 pour inscrire sans paiement initial
-                  </p>
-                </div>
-              </div>
-
-              {enrollmentData.initialPayment > 0 && (
-                <>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-3">
-                      Méthode de Paiement *
-                    </label>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {paymentMethods.filter(m => m.is_enabled).map(method => {
-                        const Icon = getPaymentMethodIcon(method.type);
-                        const isSelected = enrollmentData.paymentMethod === method.name;
-                        
-                        return (
-                          <div
-                            key={method.id}
-                            onClick={() => setEnrollmentData(prev => ({ ...prev, paymentMethod: method.name }))}
-                            className={`p-4 border-2 rounded-lg cursor-pointer transition-all ${
-                              isSelected 
-                                ? 'border-blue-500 bg-blue-50' 
-                                : 'border-gray-200 hover:border-blue-300'
-                            }`}
-                          >
-                            <div className="flex items-center space-x-3 mb-2">
-                              <Icon className={`h-5 w-5 ${isSelected ? 'text-blue-600' : 'text-gray-400'}`} />
-                              <span className={`font-medium ${isSelected ? 'text-blue-800' : 'text-gray-700'}`}>
-                                {method.name}
-                              </span>
-                            </div>
+              {/* Payment Method */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-3">
+                  Méthode de Paiement *
+                </label>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {paymentMethods.map(method => {
+                    const Icon = getPaymentMethodIcon(method.type);
+                    const color = getPaymentMethodColor(method.type);
+                    const isSelected = enrollmentData.paymentMethodId === method.id;
+                    
+                    return (
+                      <div
+                        key={method.id}
+                        onClick={() => handlePaymentMethodChange(method.id)}
+                        className={`p-4 border-2 rounded-lg cursor-pointer transition-all ${
+                          isSelected 
+                            ? `border-${color}-500 bg-${color}-50` 
+                            : 'border-gray-200 hover:border-gray-300'
+                        }`}
+                      >
+                        <div className="flex items-center space-x-3">
+                          <Icon className={`h-5 w-5 ${isSelected ? `text-${color}-600` : 'text-gray-400'}`} />
+                          <div>
+                            <span className={`font-medium ${isSelected ? `text-${color}-800` : 'text-gray-700'}`}>
+                              {method.name}
+                            </span>
                             {method.fees_percentage > 0 && (
                               <p className="text-xs text-gray-500">
                                 Frais: {method.fees_percentage}%
                               </p>
                             )}
                           </div>
-                        );
-                      })}
-                    </div>
-                    {errors.paymentMethod && <p className="text-red-500 text-sm mt-1">{errors.paymentMethod}</p>}
-                  </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
 
-                  {/* Champs spécifiques selon la méthode */}
-                  {(enrollmentData.paymentMethod === 'MTN Mobile Money' || enrollmentData.paymentMethod === 'Moov Money') && (
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Numéro de Téléphone Mobile Money *
-                      </label>
-                      <input
-                        type="tel"
-                        value={enrollmentData.mobileNumber}
-                        onChange={(e) => setEnrollmentData(prev => ({ ...prev, mobileNumber: e.target.value }))}
-                        placeholder="+229 XX XX XX XX"
-                        className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                          errors.mobileNumber ? 'border-red-300' : 'border-gray-200'
-                        }`}
-                      />
-                      {errors.mobileNumber && <p className="text-red-500 text-sm mt-1">{errors.mobileNumber}</p>}
-                    </div>
-                  )}
-
-                  {enrollmentData.paymentMethod === 'Virement Bancaire' && (
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Détails Bancaires *
-                      </label>
-                      <input
-                        type="text"
-                        value={enrollmentData.bankDetails}
-                        onChange={(e) => setEnrollmentData(prev => ({ ...prev, bankDetails: e.target.value }))}
-                        placeholder="Numéro de compte ou RIB"
-                        className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                          errors.bankDetails ? 'border-red-300' : 'border-gray-200'
-                        }`}
-                      />
-                      {errors.bankDetails && <p className="text-red-500 text-sm mt-1">{errors.bankDetails}</p>}
-                    </div>
-                  )}
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Notes (Optionnel)
-                    </label>
-                    <textarea
-                      value={enrollmentData.notes}
-                      onChange={(e) => setEnrollmentData(prev => ({ ...prev, notes: e.target.value }))}
-                      rows={2}
-                      placeholder="Commentaires sur le paiement..."
-                      className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    />
-                  </div>
-                </>
+              {/* Additional Fields based on Payment Method */}
+              {paymentMethods.find(m => m.id === enrollmentData.paymentMethodId)?.type === 'mobile' && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Numéro de Téléphone *
+                  </label>
+                  <input
+                    type="tel"
+                    value={enrollmentData.mobileNumber || ''}
+                    onChange={(e) => setEnrollmentData(prev => ({ ...prev, mobileNumber: e.target.value }))}
+                    placeholder="+229 01 XX XX XX XX"
+                    className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                      errors.mobileNumber ? 'border-red-300' : 'border-gray-200'
+                    }`}
+                  />
+                  {errors.mobileNumber && <p className="text-red-500 text-sm mt-1">{errors.mobileNumber}</p>}
+                </div>
               )}
+
+              {paymentMethods.find(m => m.id === enrollmentData.paymentMethodId)?.type === 'bank' && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Référence Bancaire *
+                  </label>
+                  <input
+                    type="text"
+                    value={enrollmentData.bankDetails || ''}
+                    onChange={(e) => setEnrollmentData(prev => ({ ...prev, bankDetails: e.target.value }))}
+                    placeholder="Numéro de référence ou RIB"
+                    className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                      errors.bankDetails ? 'border-red-300' : 'border-gray-200'
+                    }`}
+                  />
+                  {errors.bankDetails && <p className="text-red-500 text-sm mt-1">{errors.bankDetails}</p>}
+                </div>
+              )}
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Notes (Optionnel)
+                </label>
+                <textarea
+                  value={enrollmentData.notes || ''}
+                  onChange={(e) => setEnrollmentData(prev => ({ ...prev, notes: e.target.value }))}
+                  placeholder="Commentaires ou informations supplémentaires..."
+                  rows={3}
+                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
             </div>
           )}
 
@@ -931,13 +1113,13 @@ const AddStudentModal: React.FC<AddStudentModalProps> = ({
             <div className="space-y-6">
               <div className="text-center">
                 <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <UserPlus className="h-8 w-8 text-green-600" />
+                  <Users className="h-8 w-8 text-green-600" />
                 </div>
-                <h3 className="text-xl font-semibold text-gray-800 mb-2">Confirmation d'Inscription</h3>
-                <p className="text-gray-600">Vérifiez les informations avant de confirmer</p>
+                <h3 className="text-xl font-semibold text-gray-800 mb-2">Inscription Prête</h3>
+                <p className="text-gray-600">Vérifiez les informations avant de confirmer l'inscription</p>
               </div>
 
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="p-4 bg-gray-50 rounded-lg">
                   <h4 className="font-medium text-gray-800 mb-3">Informations de l'Élève</h4>
                   <div className="space-y-2 text-sm">
@@ -953,35 +1135,32 @@ const AddStudentModal: React.FC<AddStudentModalProps> = ({
                 <div className="p-4 bg-blue-50 rounded-lg">
                   <h4 className="font-medium text-blue-800 mb-3">Contact Famille</h4>
                   <div className="space-y-2 text-sm text-blue-700">
-                    <p><strong>Père:</strong> {studentData.fatherName || 'Non renseigné'}</p>
-                    <p><strong>Tél. père:</strong> {studentData.fatherPhone || 'Non renseigné'}</p>
-                    <p><strong>Mère:</strong> {studentData.motherName || 'Non renseigné'}</p>
-                    <p><strong>Tél. mère:</strong> {studentData.motherPhone || 'Non renseigné'}</p>
-                    <p><strong>Email:</strong> {studentData.parentEmail}</p>
-                    <p><strong>Adresse:</strong> {studentData.address}</p>
+                    <p><strong>Type de tuteur:</strong> {studentData.guardianType}</p>
+                    {studentData.fatherName && (
+                      <p><strong>Père:</strong> {studentData.fatherName}</p>
+                    )}
+                    {studentData.motherName && (
+                      <p><strong>Mère:</strong> {studentData.motherName}</p>
+                    )}
+                    <p><strong>Email principal:</strong> {studentData.parentEmail}</p>
+                    <p><strong>Contact d'urgence:</strong> {studentData.emergencyContactName}</p>
                   </div>
                 </div>
               </div>
 
               <div className="p-4 bg-green-50 rounded-lg">
-                <h4 className="font-medium text-green-800 mb-3">Détails de l'Inscription</h4>
+                <h4 className="font-medium text-green-800 mb-3">Inscription</h4>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-green-700">
                   <div>
-                    <p><strong>Classe:</strong> {enrollmentData.className}</p>
                     <p><strong>Année scolaire:</strong> {currentAcademicYear?.name}</p>
-                    <p><strong>Frais totaux:</strong> {enrollmentData.totalFees.toLocaleString()} FCFA</p>
+                    <p><strong>Classe:</strong> {availableClasses.find(c => c.id === enrollmentData.classId)?.name}</p>
+                    <p><strong>Niveau:</strong> {availableClasses.find(c => c.id === enrollmentData.classId)?.level}</p>
                   </div>
                   <div>
-                    {enrollmentData.initialPayment > 0 ? (
-                      <>
-                        <p><strong>Paiement initial:</strong> {enrollmentData.initialPayment.toLocaleString()} FCFA</p>
-                        <p><strong>Type:</strong> {enrollmentData.paymentType}</p>
-                        <p><strong>Méthode:</strong> {enrollmentData.paymentMethod}</p>
-                        <p><strong>Reste à payer:</strong> {(enrollmentData.totalFees - enrollmentData.initialPayment).toLocaleString()} FCFA</p>
-                      </>
-                    ) : (
-                      <p><strong>Paiement initial:</strong> Aucun (inscription sans paiement)</p>
-                    )}
+                    <p><strong>Type de frais:</strong> {enrollmentData.paymentType}</p>
+                    <p><strong>Montant:</strong> {enrollmentData.totalFees.toLocaleString()} FCFA</p>
+                    <p><strong>Paiement initial:</strong> {enrollmentData.initialPayment.toLocaleString()} FCFA</p>
+                    <p><strong>Méthode:</strong> {paymentMethods.find(m => m.id === enrollmentData.paymentMethodId)?.name}</p>
                   </div>
                 </div>
               </div>
@@ -1006,7 +1185,7 @@ const AddStudentModal: React.FC<AddStudentModalProps> = ({
             <div className="flex items-center space-x-3">
               <button
                 onClick={handleClose}
-                className="px-4 py-2 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+                className="px-6 py-2 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
               >
                 Annuler
               </button>
@@ -1014,18 +1193,16 @@ const AddStudentModal: React.FC<AddStudentModalProps> = ({
               {step !== 'confirmation' ? (
                 <button
                   onClick={handleNext}
-                  disabled={loading}
-                  className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+                  className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
                 >
                   Suivant
                 </button>
               ) : (
                 <button
                   onClick={handleSubmit}
-                  disabled={loading}
-                  className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center space-x-2 disabled:opacity-50"
+                  className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center space-x-2"
                 >
-                  <UserPlus className="h-4 w-4" />
+                  <Users className="h-4 w-4" />
                   <span>Confirmer l'Inscription</span>
                 </button>
               )}

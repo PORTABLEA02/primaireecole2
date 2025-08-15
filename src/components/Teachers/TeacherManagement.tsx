@@ -17,10 +17,12 @@ import {
   AlertCircle,
   CheckCircle,
   XCircle,
-  RefreshCw
+  RefreshCw,
+  Upload
 } from 'lucide-react';
 import AddTeacherModal from './AddTeacherModal';
 import TeacherDetailModal from './TeacherDetailModal';
+import ImportButton from '../Import/ImportButton';
 import { useAuth } from '../Auth/AuthProvider';
 import { TeacherService } from '../../services/teacherService';
 import { ActivityLogService } from '../../services/activityLogService';
@@ -225,6 +227,10 @@ const TeacherManagement: React.FC = () => {
         </div>
         
         <div className="flex items-center space-x-3">
+          <ImportButton 
+            onImportComplete={loadData}
+            variant="secondary"
+          />
           <button 
             onClick={loadData}
             className="px-4 py-2 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors flex items-center space-x-2"

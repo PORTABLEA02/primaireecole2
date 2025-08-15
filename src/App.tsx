@@ -2,30 +2,39 @@ import React, { useState } from 'react';
 import { AuthProvider, useAuth } from './components/Auth/AuthProvider';
 import { SchoolProvider } from './contexts/SchoolContext';
 import { AcademicYearProvider } from './contexts/AcademicYearContext';
+import { RouterProvider } from './contexts/RouterContext';
 import { useSessionManager } from './hooks/useSessionManager';
+import { useSessionSecurity } from './hooks/useSessionSecurity';
 import LoginPage from './components/Auth/LoginPage';
-import ProtectedRoute from './components/Auth/ProtectedRoute';
 import SessionExpiredModal from './components/Auth/SessionExpiredModal';
+import InactivityWarningModal from './components/Auth/InactivityWarningModal';
+import NavigationManager from './components/Layout/NavigationManager';
 import Sidebar from './components/Layout/Sidebar';
 import Header from './components/Layout/Header';
-import Dashboard from './components/Dashboard/Dashboard';
-import StudentManagement from './components/Students/StudentManagement';
-import ClassManagement from './components/Classes/ClassManagement';
-import FinanceManagement from './components/Finance/FinanceManagement';
-import AcademicManagement from './components/Academic/AcademicManagement';
-import TeacherManagement from './components/Teachers/TeacherManagement';
-import Settings from './components/Settings/Settings';
-import ScheduleManagement from './components/Schedule/ScheduleManagement';
-import EnrollmentInterface from './components/Enrollment/EnrollmentInterface';
+import ErrorBoundary from './components/Common/ErrorBoundary';
+import { useRouter } from './contexts/RouterContext';
 
 const AppContent: React.FC = () => {
   const { isAuthenticated, login, error, refreshSession, logout } = useAuth();
-  const [activeModule, setActiveModule] = useState('dashboard');
+  const { currentRoute, navigate } = useRouter();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
 
   // Utiliser le gestionnaire de session
   useSessionManager();
+
+  // Utiliser la sécurité de session avec avertissement d'inactivité
+  const {
+    showInactivityWarning,
+    timeUntilLogout,
+    extendSession,
+    forceLogout,
+    updateActivity
+  } = useSessionSecurity({
+    maxInactivityTime: 30, // 30 minutes
+    warningTime: 5, // Avertir 5 minutes avant
+    checkInterval: 60000 // Vérifier chaque minute
+  });
 
   // Vérifier si on doit afficher le modal de session expirée
   const showSessionExpiredModal = error && (
@@ -56,77 +65,12 @@ const AppContent: React.FC = () => {
     return <LoginPage onLogin={handleLogin} />;
   }
 
-  const renderActiveModule = () => {
-    switch (activeModule) {
-      case 'dashboard':
-        return (
-          <ProtectedRoute>
-            <Dashboard />
-          </ProtectedRoute>
-        );
-      case 'students':
-        return (
-          <ProtectedRoute requiredPermission="students">
-            <StudentManagement />
-          </ProtectedRoute>
-        );
-      case 'classes':
-        return (
-          <ProtectedRoute requiredPermission="classes">
-            <ClassManagement />
-          </ProtectedRoute>
-        );
-      case 'finance':
-        return (
-          <ProtectedRoute requiredPermission="finance">
-            <FinanceManagement />
-          </ProtectedRoute>
-        );
-      case 'academic':
-        return (
-          <ProtectedRoute requiredPermission="academic">
-            <AcademicManagement />
-          </ProtectedRoute>
-        );
-      case 'teachers':
-        return (
-          <ProtectedRoute requiredPermission="teachers">
-            <TeacherManagement />
-          </ProtectedRoute>
-        );
-      case 'settings':
-        return (
-          <ProtectedRoute requiredPermission="settings">
-            <Settings />
-          </ProtectedRoute>
-        );
-      case 'schedule':
-        return (
-          <ProtectedRoute requiredPermission="schedule">
-            <ScheduleManagement />
-          </ProtectedRoute>
-        );
-      case 'enrollment':
-        return (
-          <ProtectedRoute requiredPermission="students">
-            <EnrollmentInterface />
-          </ProtectedRoute>
-        );
-      default:
-        return (
-          <ProtectedRoute>
-            <Dashboard />
-          </ProtectedRoute>
-        );
-    }
-  };
-
   return (
-    <>
+    <ErrorBoundary>
       <div className="min-h-screen bg-gray-50 flex relative">
         <Sidebar 
-          activeModule={activeModule}
-          onModuleChange={setActiveModule}
+          activeModule={currentRoute}
+          onModuleChange={navigate}
           collapsed={sidebarCollapsed}
           onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
           isMobile={isMobile}
@@ -149,7 +93,7 @@ const AppContent: React.FC = () => {
           />
           
           <main className="p-4 sm:p-6">
-            {renderActiveModule()}
+            <NavigationManager />
           </main>
         </div>
       </div>
@@ -161,19 +105,31 @@ const AppContent: React.FC = () => {
         onLogout={logout}
         error={error}
       />
-    </>
+
+      {/* Modal d'avertissement d'inactivité */}
+      <InactivityWarningModal
+        isOpen={showInactivityWarning}
+        timeUntilLogout={timeUntilLogout}
+        onExtendSession={extendSession}
+        onLogout={forceLogout}
+      />
+    </ErrorBoundary>
   );
 };
 
 function App() {
   return (
-    <AuthProvider>
-      <SchoolProvider>
-        <AcademicYearProvider>
-          <AppContent />
-        </AcademicYearProvider>
-      </SchoolProvider>
-    </AuthProvider>
+    <ErrorBoundary>
+      <AuthProvider>
+        <SchoolProvider>
+          <AcademicYearProvider>
+            <RouterProvider>
+              <AppContent />
+            </RouterProvider>
+          </AcademicYearProvider>
+        </SchoolProvider>
+      </AuthProvider>
+    </ErrorBoundary>
   );
 }
 

@@ -5,9 +5,13 @@ import FinancialStatsCards from './FinancialStatsCards';
 import PaymentMethodsChart from './PaymentMethodsChart';
 import OutstandingPaymentsTable from './OutstandingPaymentsTable';
 import RecentPaymentsTable from './RecentPaymentsTable';
+import { useOptimizedData } from '../../hooks/useOptimizedData';
+import SmartLoader from '../Common/SmartLoader';
+import { SkeletonCard } from '../Common/LoadingStates';
 import { useAuth } from '../Auth/AuthProvider';
 import { PaymentService } from '../../services/paymentService';
 import { ActivityLogService } from '../../services/activityLogService';
+import { PerformanceOptimizer } from '../../utils/performanceOptimizer';
 
 interface Payment {
   id: string;
@@ -48,82 +52,79 @@ interface FinancialStats {
 const FinanceManagement: React.FC = () => {
   const { userSchool, currentAcademicYear, user } = useAuth();
   const [showPaymentModal, setShowPaymentModal] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  
-  // États des données
-  const [recentPayments, setRecentPayments] = useState<Payment[]>([]);
-  const [outstandingPayments, setOutstandingPayments] = useState<any[]>([]);
-  const [financialStats, setFinancialStats] = useState<FinancialStats | null>(null);
-  const [paymentMethods, setPaymentMethods] = useState<any[]>([]);
 
-  // Charger les données au montage
-  useEffect(() => {
-    if (userSchool && currentAcademicYear) {
-      loadFinancialData();
-    }
-  }, [userSchool, currentAcademicYear]);
-
-  const loadFinancialData = async () => {
-    if (!userSchool || !currentAcademicYear) return;
-
-    try {
-      setLoading(true);
-      setError(null);
-
-      // Charger toutes les données financières en parallèle
-      const [
-        recentPaymentsData,
-        outstandingData,
-        statsData,
-        methodsData
-      ] = await Promise.all([
-        PaymentService.getRecentPayments(userSchool.id, 10),
-        PaymentService.getOutstandingPayments(userSchool.id, currentAcademicYear.id),
-        PaymentService.getFinancialStats(userSchool.id, currentAcademicYear.id),
-        PaymentService.getPaymentMethods(userSchool.id)
-      ]);
-
-      setRecentPayments(recentPaymentsData);
-      setOutstandingPayments(outstandingData);
-      setPaymentMethods(methodsData);
-
-      // Calculer les statistiques financières
-      if (statsData) {
-        const totalRevenue = recentPaymentsData.reduce((sum, p) => sum + p.amount, 0);
-        const totalOutstanding = outstandingData.reduce((sum, p) => sum + p.outstanding_amount, 0);
-        
-        setFinancialStats({
-          totalRevenue,
-          totalOutstanding,
-          collectionRate: totalRevenue > 0 ? (totalRevenue / (totalRevenue + totalOutstanding)) * 100 : 0,
-          recentPayments: recentPaymentsData.length,
-          paymentsByMethod: statsData.revenueByMethod || {},
-          paymentsByType: statsData.revenueByType || {},
-          outstandingByLevel: statsData.outstandingByLevel || {}
-        });
+  // Chargement optimisé des données financières
+  const {
+    data: financialData,
+    isLoading,
+    error,
+    refresh,
+    progress,
+    stage
+  } = useOptimizedData(
+    async () => {
+      if (!userSchool || !currentAcademicYear) {
+        throw new Error('Données manquantes');
       }
 
-    } catch (error: any) {
-      console.error('Erreur lors du chargement des données financières:', error);
-      setError(error.message || 'Erreur lors du chargement des données');
-    } finally {
-      setLoading(false);
+      // Charger les données avec optimisation
+      const [
+        recentPayments,
+        outstandingPayments,
+        statsData,
+        paymentMethods
+      ] = await PerformanceOptimizer.batchRequests([
+        () => PaymentService.getRecentPayments(userSchool.id, 10),
+        () => PaymentService.getOutstandingPayments(userSchool.id, currentAcademicYear.id),
+        () => PaymentService.getFinancialStats(userSchool.id, currentAcademicYear.id),
+        () => PaymentService.getPaymentMethods(userSchool.id)
+      ], 2, 200); // Batch de 2 requêtes avec 200ms de délai
+
+      // Calculer les statistiques
+      const totalRevenue = recentPayments.reduce((sum: number, p: any) => sum + p.amount, 0);
+      const totalOutstanding = outstandingPayments.reduce((sum: number, p: any) => sum + p.outstanding_amount, 0);
+      
+      const financialStats: FinancialStats = {
+        totalRevenue,
+        totalOutstanding,
+        collectionRate: totalRevenue > 0 ? (totalRevenue / (totalRevenue + totalOutstanding)) * 100 : 0,
+        recentPayments: recentPayments.length,
+        paymentsByMethod: statsData?.revenueByMethod || {},
+        paymentsByType: statsData?.revenueByType || {},
+        outstandingByLevel: statsData?.outstandingByLevel || {}
+      };
+
+      return {
+        recentPayments,
+        outstandingPayments,
+        financialStats,
+        paymentMethods
+      };
+    },
+    {
+      cacheKey: 'financial_data',
+      dependencies: [userSchool?.id, currentAcademicYear?.id],
+      cacheDuration: 2 * 60 * 1000, // 2 minutes pour les données financières
+      enableRealTime: true
     }
-  };
+  );
+
+  const recentPayments = financialData?.recentPayments || [];
+  const outstandingPayments = financialData?.outstandingPayments || [];
+  const financialStats = financialData?.financialStats;
+  const paymentMethods = financialData?.paymentMethods || [];
 
   const handleAddPayment = async (paymentData: any) => {
     if (!userSchool || !currentAcademicYear) return;
 
     try {
-      setLoading(true);
-
       // Enregistrer le paiement
       await PaymentService.recordPayment({
         enrollmentId: paymentData.enrollmentId,
         schoolId: userSchool.id,
         academicYearId: currentAcademicYear.id,
         amount: paymentData.amount,
+        paymentMethodId: paymentData.paymentMethodId,
         paymentType: paymentData.type,
         paymentDate: paymentData.date,
         referenceNumber: paymentData.reference,
@@ -143,14 +144,12 @@ const FinanceManagement: React.FC = () => {
       });
 
       // Recharger les données
-      await loadFinancialData();
+      refresh();
       
       alert(`Paiement de ${paymentData.amount.toLocaleString()} FCFA enregistré avec succès !`);
     } catch (error: any) {
       console.error('Erreur lors de l\'enregistrement du paiement:', error);
       alert(`Erreur: ${error.message}`);
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -158,8 +157,6 @@ const FinanceManagement: React.FC = () => {
     if (!userSchool || !currentAcademicYear) return;
 
     try {
-      setLoading(true);
-      
       // Préparer les données pour l'export
       const exportData = {
         school: userSchool.name,
@@ -208,125 +205,141 @@ const FinanceManagement: React.FC = () => {
     } catch (error: any) {
       console.error('Erreur lors de l\'export:', error);
       alert(`Erreur lors de l\'export: ${error.message}`);
-    } finally {
-      setLoading(false);
     }
   };
 
-  if (error) {
-    return (
-      <div className="flex items-center justify-center min-h-96">
-        <div className="text-center">
-          <AlertCircle className="h-8 w-8 text-red-600 mx-auto mb-4" />
-          <p className="text-red-600 mb-4">{error}</p>
-          <button
-            onClick={loadFinancialData}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-          >
-            Réessayer
-          </button>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-800">Gestion Financière</h1>
-          <p className="text-sm sm:text-base text-gray-600">
-            {userSchool?.name} - Année {currentAcademicYear?.name}
-          </p>
-        </div>
-        
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3 w-full sm:w-auto">
-          <button 
-            onClick={loadFinancialData}
-            disabled={loading}
-            className="px-4 py-2 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors flex items-center justify-center space-x-2 text-sm sm:text-base"
-          >
-            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-            <span>Actualiser</span>
-          </button>
-
-          <button 
-            onClick={exportFinancialReport}
-            disabled={loading}
-            className="px-4 py-2 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors flex items-center justify-center space-x-2 text-sm sm:text-base"
-          >
-            <Download className="h-4 w-4" />
-            <span>Exporter</span>
-          </button>
-          
-          <button 
-            onClick={() => setShowPaymentModal(true)}
-            disabled={loading}
-            className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center justify-center space-x-2 text-sm sm:text-base"
-          >
-            <DollarSign className="h-4 w-4" />
-            <span>Nouveau Paiement</span>
-          </button>
-        </div>
-      </div>
-
-      {/* Financial Stats Cards */}
-      {financialStats && (
-        <FinancialStatsCards 
-          stats={financialStats}
-          loading={loading}
-        />
-      )}
-
-      {/* Charts and Analysis */}
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-        {/* Payment Methods Chart */}
-        {financialStats && (
-          <PaymentMethodsChart 
-            paymentsByMethod={financialStats.paymentsByMethod}
-            paymentMethods={paymentMethods}
-          />
-        )}
-
-        {/* Recent Payments */}
-        <RecentPaymentsTable 
-          payments={recentPayments}
-          loading={loading}
-          onRefresh={loadFinancialData}
-        />
-      </div>
-
-      {/* Outstanding Payments Table */}
-      <OutstandingPaymentsTable 
-        outstandingPayments={outstandingPayments}
-        loading={loading}
-        onPaymentRecord={loadFinancialData}
-      />
-
-      {/* Summary by Level */}
-      {financialStats && Object.keys(financialStats.outstandingByLevel).length > 0 && (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-          <div className="p-6 border-b border-gray-100">
-            <h2 className="text-lg font-semibold text-gray-800">Impayés par Niveau</h2>
+    <SmartLoader
+      isLoading={isLoading}
+      error={error}
+      progress={progress}
+      stage={stage}
+      onRetry={refresh}
+    >
+      <div className="space-y-6">
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div>
+            <h1 className="text-xl sm:text-2xl font-bold text-gray-800">Gestion Financière</h1>
+            <p className="text-sm sm:text-base text-gray-600">
+              {userSchool?.name} - Année {currentAcademicYear?.name}
+            </p>
           </div>
           
-          <div className="p-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              {Object.entries(financialStats.outstandingByLevel).map(([level, amount]) => (
-                <div key={level} className="p-4 bg-red-50 rounded-lg border border-red-200">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm text-red-600 font-medium">{level}</p>
-                      <p className="text-lg font-bold text-red-800">
-                        {(amount as number).toLocaleString()} FCFA
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3 w-full sm:w-auto">
+            <button 
+              onClick={refresh}
+              disabled={isLoading}
+              className="px-4 py-2 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors flex items-center justify-center space-x-2 text-sm sm:text-base"
+            >
+              <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+              <span>Actualiser</span>
+            </button>
+
+            <button 
+              onClick={exportFinancialReport}
+              disabled={isLoading}
+              className="px-4 py-2 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors flex items-center justify-center space-x-2 text-sm sm:text-base"
+            >
+              <Download className="h-4 w-4" />
+              <span>Exporter</span>
+            </button>
+            
+            <button 
+              onClick={() => setShowPaymentModal(true)}
+              disabled={isLoading}
+              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center justify-center space-x-2 text-sm sm:text-base"
+            >
+              <DollarSign className="h-4 w-4" />
+              <span>Nouveau Paiement</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Financial Stats Cards */}
+        {financialStats ? (
+          <FinancialStatsCards 
+            stats={financialStats}
+            loading={isLoading}
+          />
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+            {Array.from({ length: 4 }).map((_, index) => (
+              <SkeletonCard key={index} />
+            ))}
+          </div>
+        )}
+
+        {/* Charts and Analysis */}
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+          {/* Payment Methods Chart */}
+          {financialStats && (
+            <PaymentMethodsChart 
+              paymentsByMethod={financialStats.paymentsByMethod}
+              paymentMethods={paymentMethods}
+            />
+          )}
+
+          {/* Recent Payments */}
+          <RecentPaymentsTable 
+            payments={recentPayments}
+            loading={isLoading}
+            onRefresh={refresh}
+          />
+        </div>
+
+        {/* Outstanding Payments Table */}
+        <OutstandingPaymentsTable 
+          outstandingPayments={outstandingPayments}
+          loading={isLoading}
+          onPaymentRecord={refresh}
+        />
+
+        {/* Summary by Level */}
+        {financialStats && Object.keys(financialStats.outstandingByLevel).length > 0 && (
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+            <div className="p-6 border-b border-gray-100">
+              <h2 className="text-lg font-semibold text-gray-800">Impayés par Niveau</h2>
+            </div>
+            
+            <div className="p-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                {Object.entries(financialStats.outstandingByLevel).map(([level, amount]) => (
+                  <div key={level} className="p-4 bg-red-50 rounded-lg border border-red-200">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm text-red-600 font-medium">{level}</p>
+                        <p className="text-lg font-bold text-red-800">
+                          {(amount as number).toLocaleString()} FCFA
+                        </p>
+                      </div>
+                      <Users className="h-5 w-5 text-red-600" />
+                    </div>
+                    <div className="mt-2">
+                      <p className="text-xs text-red-500">
+                        {outstandingPayments.filter(p => p.level === level).length} élève(s)
                       </p>
                     </div>
-                    <Users className="h-5 w-5 text-red-600" />
                   </div>
-                  <div className="mt-2">
-                    <p className="text-xs text-red-500">
-                      {outstandingPayments.filter(p => p.level === level).length} élève(s)
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Payment Modal */}
+        <PaymentModal
+          isOpen={showPaymentModal}
+          onClose={() => setShowPaymentModal(false)}
+          onAddPayment={handleAddPayment}
+        />
+      </div>
+    </SmartLoader>
+  );
+};
+
+export default FinanceManagement;
+
                     </p>
                   </div>
                 </div>

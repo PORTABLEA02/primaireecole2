@@ -1,10 +1,14 @@
 import React, { useState } from 'react';
 import { User, LogOut, Settings, Shield, ChevronDown } from 'lucide-react';
 import { useAuth } from '../Auth/AuthProvider';
+import { useRouter } from '../../contexts/RouterContext';
+import { useSessionSecurity } from '../../hooks/useSessionSecurity';
 
 const UserMenu: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
   const { user, userSchool, logout } = useAuth();
+  const { navigate } = useRouter();
+  const { lastActivity, config } = useSessionSecurity();
 
   const handleLogout = () => {
     if (confirm('Êtes-vous sûr de vouloir vous déconnecter ?')) {
@@ -12,6 +16,10 @@ const UserMenu: React.FC = () => {
     }
   };
 
+  const handleNavigateToSettings = () => {
+    navigate('settings');
+    setIsOpen(false);
+  };
   const getRoleColor = (role: string) => {
     switch (role) {
       case 'Admin': return 'bg-red-100 text-red-700';
@@ -23,6 +31,15 @@ const UserMenu: React.FC = () => {
     }
   };
 
+  const getTimeSinceActivity = (): string => {
+    if (!lastActivity) return 'Inconnue';
+    const now = new Date();
+    const diffInMinutes = Math.floor((now.getTime() - lastActivity.getTime()) / (1000 * 60));
+    
+    if (diffInMinutes < 1) return 'Maintenant';
+    if (diffInMinutes < 60) return `Il y a ${diffInMinutes}m`;
+    return `Il y a ${Math.floor(diffInMinutes / 60)}h`;
+  };
   if (!user) return null;
 
   return (
@@ -68,6 +85,18 @@ const UserMenu: React.FC = () => {
                   </span>
                 </div>
               </div>
+              
+              {/* Session Info */}
+              <div className="mt-3 p-2 bg-gray-50 rounded text-xs text-gray-600">
+                <div className="flex justify-between">
+                  <span>Dernière activité:</span>
+                  <span>{getTimeSinceActivity()}</span>
+                </div>
+                <div className="flex justify-between mt-1">
+                  <span>Timeout session:</span>
+                  <span>{config.maxInactivityTime}min</span>
+                </div>
+              </div>
             </div>
 
             {/* Menu Items */}
@@ -78,8 +107,9 @@ const UserMenu: React.FC = () => {
               </button>
               
               <button className="w-full px-4 py-2 text-left hover:bg-gray-50 transition-colors flex items-center space-x-3">
+                onClick={handleNavigateToSettings}
                 <Settings className="h-4 w-4 text-gray-500" />
-                <span className="text-gray-700">Préférences</span>
+                <span className="text-gray-700">Paramètres</span>
               </button>
               
               <button className="w-full px-4 py-2 text-left hover:bg-gray-50 transition-colors flex items-center space-x-3">

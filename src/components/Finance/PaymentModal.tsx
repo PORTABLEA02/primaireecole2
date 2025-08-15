@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { X, DollarSign, User, Calendar, CreditCard, Smartphone, Building, Search, AlertCircle, CheckCircle } from 'lucide-react';
 import { useAuth } from '../Auth/AuthProvider';
 import { StudentService } from '../../services/studentService';
+import { PaymentService } from '../../services/paymentService';
+import { supabase } from '../../lib/supabase';
 
 interface PaymentModalProps {
   isOpen: boolean;
@@ -22,6 +24,7 @@ interface PaymentData {
   mobileNumber?: string;
   bankDetails?: string;
   notes?: string;
+  paymentMethodId?: string | null;
 }
 
 const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, onAddPayment }) => {
@@ -35,13 +38,15 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, onAddPayme
     amount: 0,
     type: 'Scolarité',
     method: 'Espèces',
-    date: new Date().toISOString().split('T')[0]
+    date: new Date().toISOString().split('T')[0],
+    paymentMethodId: null
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   // Charger les élèves au montage du modal
   React.useEffect(() => {
     if (isOpen && userSchool && currentAcademicYear) {
+      
       loadStudents();
     }
   }, [isOpen, userSchool, currentAcademicYear]);
@@ -61,23 +66,59 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, onAddPayme
   };
 
   const paymentTypes = [
-    { value: 'Inscription', label: 'Frais d\'inscription', amount: 50000 },
-    { value: 'Scolarité', label: 'Paiement de scolarité (tranche)', amount: 0 },
+    { value: 'Inscription', label: 'Frais d\'inscription' },
+    { value: 'Scolarité', label: 'Paiement de scolarité (tranche)' },
     { value: 'Cantine', label: 'Frais de cantine', amount: 25000 },
     { value: 'Transport', label: 'Frais de transport', amount: 15000 },
     { value: 'Fournitures', label: 'Fournitures scolaires', amount: 20000 },
     { value: 'Autre', label: 'Autre paiement', amount: 0 }
   ];
 
-  // Frais de scolarité annuels par niveau
-  const scolariteAnnuelle = {
-    'Maternelle': 300000,
-    'CI': 350000,
-    'CP': 350000,
-    'CE1': 400000,
-    'CE2': 400000,
-    'CM1': 450000,
-    'CM2': 450000
+  const [feeTypes, setFeeTypes] = useState<any[]>([]);
+  const [paymentMethods, setPaymentMethods] = useState<any[]>([]);
+
+  // Charger les types de frais au montage du modal
+  React.useEffect(() => {
+    if (isOpen && userSchool) {
+      loadFeeTypes();
+      loadPaymentMethods();
+    }
+  }, [isOpen, userSchool]);
+
+  const loadFeeTypes = async () => {
+    if (!userSchool) return;
+
+    try {
+      const { data, error } = await supabase
+        .from('fee_types')
+        .select('*')
+        .eq('school_id', userSchool.id)
+        .order('name');
+
+      if (error) throw error;
+      setFeeTypes(data || []);
+    } catch (error) {
+      console.error('Erreur lors du chargement des types de frais:', error);
+    }
+  };
+
+  const loadPaymentMethods = async () => {
+    if (!userSchool) return;
+
+    try {
+      const methods = await PaymentService.getPaymentMethods(userSchool.id);
+      setPaymentMethods(methods);
+      
+      // Set default payment method
+      if (methods.length > 0) {
+        setPaymentData(prev => ({
+          ...prev,
+          paymentMethodId: methods[0].id
+        }));
+      }
+    } catch (error) {
+      console.error('Erreur lors du chargement des méthodes de paiement:', error);
+    }
   };
 
   const filteredStudents = students.filter(student =>
@@ -121,15 +162,31 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, onAddPayme
   };
 
   const handlePaymentTypeChange = (type: string) => {
-    const paymentType = paymentTypes.find(pt => pt.value === type);
-    if (type === 'Scolarité') {
-      // Pour la scolarité, on ne prédéfinit pas le montant
+    if (type === 'Inscription') {
+      // Chercher les frais d'inscription
+      const inscriptionFee = feeTypes.find(f => 
+        f.name.toLowerCase().includes('inscription') && 
+        (f.level === 'Tous' || f.level === selectedStudent?.level)
+      );
       setPaymentData(prev => ({
         ...prev,
         type: type as PaymentData['type'],
-        amount: 0
+        amount: inscriptionFee?.amount || 50000
+      }));
+    } else if (type === 'Scolarité') {
+      // Chercher les frais de scolarité pour ce niveau
+      const scolariteFee = feeTypes.find(f => 
+        f.name.toLowerCase().includes('scolarité') && 
+        f.level === selectedStudent?.level
+      );
+      setPaymentData(prev => ({
+        ...prev,
+        type: type as PaymentData['type'],
+        amount: scolariteFee?.amount || 0
       }));
     } else {
+      // Pour les autres types, utiliser les montants prédéfinis
+      const paymentType = paymentTypes.find(pt => pt.value === type);
       setPaymentData(prev => ({
         ...prev,
         type: type as PaymentData['type'],
@@ -140,6 +197,9 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, onAddPayme
 
   const handleSubmit = () => {
     if (validatePayment() && selectedStudent) {
+      // Find the payment method ID based on the selected method
+      const selectedPaymentMethod = paymentMethods.find(pm => pm.name === paymentData.method);
+      
       const completePaymentData: PaymentData = {
         studentId: selectedStudent.id,
         studentName: selectedStudent.name,
@@ -152,7 +212,8 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, onAddPayme
         reference: paymentData.reference,
         mobileNumber: paymentData.mobileNumber,
         bankDetails: paymentData.bankDetails,
-        notes: paymentData.notes
+        notes: paymentData.notes,
+        paymentMethodId: selectedPaymentMethod?.id || null
       };
 
       onAddPayment(completePaymentData);
@@ -167,7 +228,8 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, onAddPayme
       amount: 0,
       method: 'Espèces',
       type: 'Scolarité',
-      date: new Date().toISOString().split('T')[0]
+      date: new Date().toISOString().split('T')[0],
+      paymentMethodId: null
     });
     setSearchTerm('');
     setErrors({});
@@ -402,10 +464,18 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, onAddPayme
                     {selectedStudent && (
                       <div className="space-y-2 text-sm text-blue-700">
                         <p><strong>Classe:</strong> {selectedStudent.class_name}</p>
-                        <p><strong>Frais annuels:</strong> {scolariteAnnuelle[selectedStudent.level as keyof typeof scolariteAnnuelle]?.toLocaleString() || 'Non défini'} FCFA</p>
+                        <p><strong>Frais annuels:</strong> {
+                          (() => {
+                            const scolariteFee = feeTypes.find(f => 
+                              f.name.toLowerCase().includes('scolarité') && 
+                              f.level === selectedStudent.level
+                            );
+                            return scolariteFee?.amount.toLocaleString() || 'Non défini';
+                          })()
+                        } FCFA</p>
                         <p><strong>Déjà payé:</strong> {(selectedStudent.outstanding_amount > 0 ? 
-                          (scolariteAnnuelle[selectedStudent.level as keyof typeof scolariteAnnuelle] - selectedStudent.outstanding_amount) : 
-                          scolariteAnnuelle[selectedStudent.level as keyof typeof scolariteAnnuelle]
+                          (selectedStudent.total_fees - selectedStudent.outstanding_amount) : 
+                          selectedStudent.total_fees
                         )?.toLocaleString()} FCFA</p>
                         <p><strong>Reste à payer:</strong> {selectedStudent.outstanding_amount.toLocaleString()} FCFA</p>
                       </div>

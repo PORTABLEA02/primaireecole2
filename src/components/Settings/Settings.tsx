@@ -12,6 +12,7 @@ import FinancialReportsModal from './FinancialReportsModal';
 import BackupModal from './BackupModal';
 import BulletinTemplatesModal from './BulletinTemplatesModal';
 import SchoolManagementModal from './SchoolManagementModal';
+import ImportHistoryModal from '../Import/ImportHistoryModal';
 import { useAcademicYear } from '../../contexts/AcademicYearContext';
 
 const Settings: React.FC = () => {
@@ -28,7 +29,8 @@ const Settings: React.FC = () => {
         { name: 'Informations de l\'école', action: 'school-info' },
         { name: 'Année scolaire active', action: 'academic-year' }, 
         { name: 'Périodes et trimestres', action: 'academic-year' },
-        { name: 'Seuil de promotion', action: 'academic-config' }
+        { name: 'Seuil de promotion', action: 'academic-config' },
+        { name: 'Historique des imports', action: 'import-history' }
       ]
     },
     {
@@ -282,6 +284,11 @@ const Settings: React.FC = () => {
 
       <SchoolManagementModal
         isOpen={activeModal === 'school-management'}
+        onClose={() => setActiveModal(null)}
+      />
+
+      <ImportHistoryModal
+        isOpen={activeModal === 'import-history'}
         onClose={() => setActiveModal(null)}
       />
     </div>

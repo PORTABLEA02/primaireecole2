@@ -3,6 +3,7 @@ import { User as SupabaseUser } from '@supabase/supabase-js';
 import { supabase } from '../../lib/supabase';
 import { User as UserType } from '../../types/User';
 import { School } from '../../types/School';
+import { SessionUtils } from '../../utils/sessionUtils';
 
 interface AuthContextType {
   user: UserType | null;
@@ -51,20 +52,28 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         console.log('Auth state change:', event, session?.user?.id);
         
         if (event === 'SIGNED_IN' && session?.user) {
+          // Initialiser la session
+          SessionUtils.initializeSession();
+          SessionUtils.recordUserAction('login');
+          
           // Utiliser setTimeout pour éviter le deadlock
           setTimeout(() => {
             loadUserProfile(session.user);
           }, 0);
         } else if (event === 'SIGNED_OUT') {
+          // Nettoyer la session
+          SessionUtils.cleanupSession();
           handleSignOut();
         } else if (event === 'TOKEN_REFRESHED' && session?.user) {
           // Pour le rafraîchissement de token, mettre à jour l'utilisateur Supabase
           setSupabaseUser(session.user);
+          SessionUtils.recordUserAction('token_refresh');
           console.log('Token refreshed successfully');
         } else if (event === 'TOKEN_REFRESH_FAILED') {
           // Le refresh token est invalide → obliger l'utilisateur à se reconnecter
           console.log('Session expirée, merci de vous reconnecter');
           setError('Votre session a expiré. Veuillez vous reconnecter.');
+          SessionUtils.cleanupSession();
           await handleSignOut();
         }
       }
@@ -84,12 +93,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       if (error) {
         console.error('Erreur lors du refresh de session:', error);
         setError('Session expirée, merci de vous reconnecter');
+        SessionUtils.cleanupSession();
         await handleSignOut();
         return false;
       }
 
       if (data.session?.user) {
         setSupabaseUser(data.session.user);
+        SessionUtils.recordUserAction('manual_refresh');
         console.log('Session refreshed manually');
         return true;
       }
@@ -98,12 +109,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     } catch (error) {
       console.error('Erreur lors du refresh manuel:', error);
       setError('Erreur lors du rafraîchissement de la session');
+      SessionUtils.cleanupSession();
       return false;
     }
   };
 
   // Fonction centralisée pour gérer la déconnexion
   const handleSignOut = () => {
+    SessionUtils.cleanupSession();
     setUser(null);
     setSupabaseUser(null);
     setUserSchool(null);
@@ -297,6 +310,22 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     try {
       setLoading(true);
       
+      // Logger la déconnexion avant de perdre les informations utilisateur
+      if (userSchool && user) {
+        try {
+          await ActivityLogService.logActivity({
+            schoolId: userSchool.id,
+            userId: user.id,
+            action: 'LOGOUT',
+            entityType: 'auth',
+            level: 'info',
+            details: 'Déconnexion manuelle'
+          });
+        } catch (logError) {
+          console.error('Erreur lors du logging de déconnexion:', logError);
+        }
+      }
+      
       const { error } = await supabase.auth.signOut();
       
       if (error) {
@@ -305,6 +334,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       }
 
       handleSignOut();
+      
+      // Nettoyer le localStorage
+      localStorage.removeItem('ecoletech_current_route');
+      localStorage.removeItem('ecoletech_last_activity');
     } catch (error: any) {
       console.error('Erreur lors de la déconnexion:', error);
       setError(error.message || 'Erreur de déconnexion');

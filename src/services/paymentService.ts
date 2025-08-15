@@ -7,7 +7,7 @@ export class PaymentService {
     schoolId: string;
     academicYearId: string;
     amount: number;
-    paymentMethodId?: string;
+    paymentMethodId?: string | null;
     paymentType: 'Inscription' | 'Scolarité' | 'Cantine' | 'Transport' | 'Fournitures' | 'Autre';
     paymentDate?: string;
     referenceNumber?: string;
@@ -24,14 +24,14 @@ export class PaymentService {
           school_id: paymentData.schoolId,
           academic_year_id: paymentData.academicYearId,
           amount: paymentData.amount,
-          payment_method_id: paymentData.paymentMethodId,
+          payment_method_id: paymentData.paymentMethodId || null,
           payment_type: paymentData.paymentType,
           payment_date: paymentData.paymentDate || new Date().toISOString().split('T')[0],
           reference_number: paymentData.referenceNumber,
           mobile_number: paymentData.mobileNumber,
           bank_details: paymentData.bankDetails,
           notes: paymentData.notes,
-          processed_by: paymentData.processedBy,
+          processed_by: paymentData.processedBy || null,
           status: 'Confirmé'
         })
         .select()

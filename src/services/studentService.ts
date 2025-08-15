@@ -157,6 +157,25 @@ export class StudentService {
   // Inscrire un élève dans une classe
   static async enrollStudent(enrollmentData: EnrollmentData) {
     try {
+      // Récupérer le niveau de la classe pour calculer les frais totaux
+      const { data: classInfo, error: classError } = await supabase
+        .from('classes')
+        .select('level')
+        .eq('id', enrollmentData.classId)
+        .eq('school_id', enrollmentData.schoolId)
+        .eq('academic_year_id', enrollmentData.academicYearId)
+        .single();
+
+      if (classError) {
+        throw new Error(`Erreur lors de la récupération de la classe: ${classError.message}`);
+      }
+
+      // Calculer les frais totaux basés sur le niveau de la classe
+      const calculatedTotalFees = await this.calculateTotalFeesForLevel(
+        enrollmentData.schoolId, 
+        classInfo.level
+      );
+
       const { data, error } = await supabase
         .from('student_class_enrollments')
         .insert({
@@ -164,7 +183,7 @@ export class StudentService {
           class_id: enrollmentData.classId,
           school_id: enrollmentData.schoolId,
           academic_year_id: enrollmentData.academicYearId,
-          total_fees: enrollmentData.totalFees,
+          total_fees: calculatedTotalFees,
           paid_amount: enrollmentData.paidAmount || 0,
           payment_method: enrollmentData.paymentMethod,
           mobile_number: enrollmentData.mobileNumber,
@@ -183,7 +202,7 @@ export class StudentService {
         entityType: 'enrollment',
         entityId: data.id,
         level: 'success',
-        details: `Inscription créée pour l'élève dans la classe`
+        details: `Inscription créée pour l'élève dans la classe (Frais totaux: ${calculatedTotalFees.toLocaleString()} FCFA)`
       });
 
       return data;
@@ -193,6 +212,32 @@ export class StudentService {
     }
   }
 
+  // Calculer les frais totaux pour un niveau donné
+  static async calculateTotalFeesForLevel(schoolId: string, level: string): Promise<number> {
+    try {
+      const { data: feeTypes, error } = await supabase
+        .from('fee_types')
+        .select('amount')
+        .eq('school_id', schoolId)
+        .eq('is_mandatory', true)
+        .eq('level',level);
+
+      if (error) {
+        throw new Error(`Erreur lors de la récupération des frais: ${error.message}`);
+      }
+
+      // Calculer la somme de tous les frais obligatoires
+      const totalFees = (feeTypes || []).reduce((sum, feeType) => sum + feeType.amount, 0);
+      
+      // Si aucun frais configuré, utiliser un montant par défaut basé sur le niveau
+     
+      return totalFees;
+    } catch (error) {
+      console.error('Erreur lors du calcul des frais totaux:', error);
+      
+      
+    }
+  }
   // Créer un élève avec inscription en une transaction
   static async createStudentWithEnrollment(
     studentData: StudentData,
